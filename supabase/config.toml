@@ -1,0 +1,15 @@
+# Configuração do projeto local do Supabase CLI.
+# Ajuste `project_id` ao linkar com o projeto remoto (`supabase link`).
+project_id = "assistente-juridico"
+
+[db]
+# Versão do Postgres do projeto Supabase.
+major_version = 15
+
+[db.pooler]
+# Pooler (Supavisor). O tráfego da aplicação usa o modo "transaction" (porta 6543).
+enabled = true
+pool_mode = "transaction"
+
+[migration]
+# Mantém o schema versionado neste diretório (supabase/migrations).

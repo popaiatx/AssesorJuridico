@@ -38,6 +38,10 @@ export async function withTenant<T>(
   return pool.begin(async (tx) => {
     // is_local = true → vale só nesta transação (SET LOCAL).
     await tx`select set_config('app.current_assinante_id', ${assinanteId}, true)`;
+    // Rebaixa o privilégio para uma role SEM BYPASSRLS, garantindo que o RLS
+    // ATUE de fato (a role da conexão — postgres — tem BYPASSRLS no Supabase e
+    // ignoraria as políticas). 'authenticated' é NOLOGIN e sem bypass.
+    await tx`set local role authenticated`;
     return fn(tx as TenantSql);
   }) as Promise<T>;
 }
