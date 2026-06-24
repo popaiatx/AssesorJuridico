@@ -1,0 +1,25 @@
+# Dependências
+node_modules/
+
+# Build
+dist/
+*.tsbuildinfo
+
+# Segredos — NUNCA commitar (ver CLAUDE.md e skill seguranca-dados-sigilo)
+.env
+.env.*
+!.env.example
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+.supabase/
+
+# Logs e SO
+*.log
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
