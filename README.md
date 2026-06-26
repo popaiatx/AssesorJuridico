@@ -40,7 +40,7 @@ src/
     http/        # servidor Fastify + health
   index.ts       # bootstrap
 supabase/
-  migrations/    # 0001–0012 (schema, RLS, índices)
+  migrations/    # 0001–0013 (schema, RLS, índices, idempotência WhatsApp)
   config.toml
 ```
 
@@ -66,6 +66,44 @@ WhatsApp e os cérebros são passos futuros.
 tenant**. Interações **pré-tenant** (onboarding/telefone desconhecido) vão só ao
 logger da aplicação, sem persistir e sem dado sensível — a **tabela de auditoria
 pré-tenant será retomada no onboarding** (R-B), para o funil não virar ponto cego.
+
+## Webhook do WhatsApp (Cloud API)
+
+Entrada real do produto. Só é registrado se as `WHATSAPP_*` estiverem
+configuradas (senão o app sobe com o webhook desabilitado).
+
+- `GET /webhooks/whatsapp` — handshake de verificação (`hub.challenge` /
+  `WHATSAPP_VERIFY_TOKEN`).
+- `POST /webhooks/whatsapp` — recebe mensagens.
+
+**Garantias (críticas):**
+- **Assinatura** `X-Hub-Signature-256` validada (HMAC do corpo cru com
+  `WHATSAPP_APP_SECRET`, comparação timing-safe). Inválida → `401`, não processa.
+- **Processa ANTES do ack:** o processamento conclui e só então responde `200`;
+  falha transitória → `500` e a Meta reentrega (confiabilidade > velocidade).
+- **Idempotência com lease** (migração 0013, funções `SECURITY DEFINER`): o claim
+  só vira `done` **após sucesso**; falha **libera** o claim; crash no meio é
+  coberto pela expiração do lease. Nenhuma mensagem se perde.
+- **Janela de 24h** por contato: texto livre só dentro dela; fora, exige template.
+- **Mídia** (imagem/documento/áudio/…): responde placeholder honesto; download e
+  Storage ficam **PENDENTE**.
+
+### Verificação manual com a Meta (PENDENTE — exige credenciais reais)
+
+Não há como automatizar isto sem credenciais/URL pública. Passo a passo:
+
+1. Preencha no `.env`: `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`,
+   `WHATSAPP_VERIFY_TOKEN` (string que você escolhe), `WHATSAPP_APP_SECRET`.
+2. `npm run dev` e exponha a porta com um túnel (ex.: `cloudflared tunnel --url
+   http://localhost:3000` ou `ngrok http 3000`) para obter uma URL HTTPS pública.
+3. No painel Meta (WhatsApp > Configuration), configure o **Callback URL**
+   (`https://SEU-TUNEL/webhooks/whatsapp`) e o **Verify Token** igual ao do `.env`;
+   clique em **Verify and Save** → deve passar no handshake (GET).
+4. **Subscribe** ao campo `messages`.
+5. Envie uma mensagem real do seu WhatsApp para o número de teste → você deve
+   receber a resposta do assistente (placeholder honesto desta fase).
+6. **Template:** cadastre/aprovar na Meta um template `lembrete_generico`
+   (categoria utilitária, `pt_BR`, 1 parâmetro) antes de usar envio proativo.
 
 ## Como rodar
 
@@ -130,9 +168,14 @@ tenant e índices nas FKs e colunas de filtro.
 
 Nada de mock que finja funcionar — o que não foi implementado está explícito:
 
-- **Adapters externos** (`src/adapters/{payment,courts,whatsapp,llm,storage}`):
-  **stubs que lançam `NotImplementedError`**. Implementação real em fases próprias.
-  (Os adapters de `classifier` e `interaction-log` já são reais.)
+- **Adapters externos** (`src/adapters/{payment,courts,llm,storage}`): **stubs que
+  lançam `NotImplementedError`**. Implementação real em fases próprias. (Os
+  adapters de `classifier`, `interaction-log` e **`whatsapp`** já são reais.)
+- **WhatsApp — validação manual e mídia:** o adapter é real, mas o handshake/
+  entrega reais com a Meta e o template aprovado exigem **verificação manual**
+  (passo a passo acima). **Download de mídia + Storage** ficam PENDENTE.
+- **Durabilidade do webhook:** hoje processa-antes-do-ack (sem perda). Uma **fila
+  durável** permitiria ack cedo com segurança — melhoria futura.
 - **Classificador via LLM**: a interface (`IntentClassifier`) está pronta; hoje
   só o classificador determinístico. Plugar um classificador via `LlmPort` depois.
 - **Onboarding / criação de assinante** (`createAssinanteOnboarding` em
@@ -143,7 +186,7 @@ Nada de mock que finja funcionar — o que não foi implementado está explícit
 - **Captura de `entrada`/`saida` no log**: hoje ficam fora; só após anonimização.
 - **Três cérebros**: NL→SQL (C1), RAG jurídico (C2), tribunais (C3) — fases
   seguintes. `pgvector` (corpus do RAG) ainda não criado.
-- **Pagamento, WhatsApp real, lembretes, painel admin** — fases seguintes.
+- **Pagamento, lembretes proativos, painel admin** — fases seguintes.
 - **Storage**: buckets privados e políticas por tenant — fase de documentos.
 - **Provisionamento Supabase**: projeto, pooler, role sem `BYPASSRLS`,
   backups/PITR — operação.

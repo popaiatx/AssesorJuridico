@@ -10,12 +10,16 @@
  */
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import type { WhatsappPort } from '../../core/ports/whatsapp.js';
-import type { WhatsappWebhookProcessor } from '../../application/whatsapp-webhook-processor.js';
+
+/** Mínimo que a rota precisa do processor (facilita teste/abstração). */
+export interface WebhookProcessor {
+  process(rawBody: Buffer): Promise<void>;
+}
 
 export interface WhatsappRoutesDeps {
   verifyToken: string;
-  adapter: WhatsappPort;
-  processor: WhatsappWebhookProcessor;
+  adapter: Pick<WhatsappPort, 'verifyWebhook'>;
+  processor: WebhookProcessor;
 }
 
 interface WithRawBody {
