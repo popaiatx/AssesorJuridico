@@ -9,11 +9,20 @@
  * Apenas assinaturas; sem implementação nesta fase (ver adapters/whatsapp).
  */
 
+/** Mídia recebida (imagem/documento/áudio/etc.). Conteúdo não baixado nesta fase. */
+export interface InboundMedia {
+  type: 'image' | 'document' | 'audio' | 'video' | 'sticker' | 'unknown';
+  mediaId: string;
+  filename?: string;
+}
+
 export interface InboundMessage {
   messageId: string;
   from: string; // telefone (identidade)
   text: string;
   timestamp: string; // ISO
+  /** Presente quando a mensagem é mídia (o texto pode ser o caption ou vazio). */
+  media?: InboundMedia;
 }
 
 export interface TemplateMessage {
