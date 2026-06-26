@@ -39,7 +39,7 @@ const RULES: Record<Exclude<Intent, 'outro'>, Rule[]> = {
   ],
   consulta_dados: [
     { kw: 'meus processos', w: 2 },
-    { kw: 'meu processo', w: 2 },
+    { kw: 'meu processo', w: 1 },
     { kw: 'meus casos', w: 2 },
     { kw: 'meus clientes', w: 2 },
     { kw: 'meu cliente', w: 1 },

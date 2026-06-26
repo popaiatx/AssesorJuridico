@@ -6,7 +6,8 @@
 
 ## Fase atual
 
-- **Fase 1 (Núcleo).** Em andamento: **Passo 2 — Orquestrador + classificação de intenção**.
+- **Fase 1 (Núcleo).** Concluído o **Passo 2 — Orquestrador + classificação de
+  intenção**. Próximo: adapter real do WhatsApp.
 
 ## O que já está pronto
 
@@ -16,7 +17,12 @@
   (payment, courts, whatsapp, llm, storage) com adapters **stub**; migrações
   Supabase `0001–0012` (schema do §5, RLS por tenant, índices); `/health` e
   `/health/ready`. Validado em Postgres 15.
-- **Passo 2 — Orquestrador.** _(em andamento)_
+- **Passo 2 — Orquestrador + classificação.** Intenções tipadas; `IntentClassifier`
+  + `KeywordIntentClassifier` determinístico (sem LLM); `Orchestrator` que resolve
+  telefone→assinante (pré-tenant), roteia para **um** handler, **pergunta** se
+  ambíguo (rótulos amigáveis), e registra a interação; handlers **placeholder
+  honestos**; `InteractionLogPort` (grava só com tenant; pré-tenant só logger).
+  49 testes verdes (classificação, registro, roteamento, log).
 
 ## Decisões técnicas-chave
 
@@ -33,6 +39,11 @@
   retorna só o id) para resolver telefone → assinante antes de haver contexto.
 - **`.env.example` é a fonte única de config**; cada adapter valida a própria
   config (vars futuras são opcionais até o adapter ser ativado).
+- **Um cérebro por mensagem:** o orquestrador roteia para exatamente um handler;
+  se a intenção é ambígua, **pergunta** em vez de adivinhar (rótulos amigáveis,
+  nunca nomes internos).
+- **Classificador determinístico** (palavras-chave, sem acento) por enquanto;
+  interface pronta para um classificador via LLM depois.
 
 ## PENDENTE (explícito)
 

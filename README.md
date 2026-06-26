@@ -25,8 +25,15 @@ src/
     domain/      # entidades (§5 do PLANEJAMENTO) — sem I/O
     ports/       # interfaces de saída: payment, courts, whatsapp, llm, storage
     errors.ts    # NotImplementedError
-  application/   # casos de uso — VAZIO nesta fase
-  adapters/      # stubs dos ports (lançam NotImplementedError) — PENDENTE
+    domain/intents.ts      # intenções tipadas + rótulos amigáveis + mapa→cérebro
+    orchestration/         # contrato de handler (1 por intenção)
+    ports/                 # + intent-classifier, interaction-log
+  application/
+    orchestrator.ts        # porta de entrada (classifica → roteia 1 handler → loga)
+    handlers/              # placeholders honestos ("em desenvolvimento")
+  adapters/      # stubs dos ports + classifier (real) + interaction-log (real)
+    classifier/            # KeywordIntentClassifier (determinístico, sem LLM)
+    interaction-log/       # SupabaseInteractionLog (withTenant / pré-tenant)
   infra/
     config/      # carrega e valida envs (fail-fast)
     db/          # pool, withTenant (RLS), admin (service_role), identity (pré-tenant)
@@ -38,6 +45,27 @@ supabase/
 ```
 
 O `core/` não importa `infra/` nem adapters. A dependência aponta para dentro.
+
+## Orquestração (porta de entrada)
+
+Cada mensagem passa pelo `Orchestrator` (`src/application/orchestrator.ts`):
+
+1. resolve telefone → `assinante_id` (caminho pré-tenant, `resolveAssinanteByPhone`);
+2. telefone **desconhecido** → intenção `onboarding` (sem classificar);
+3. classifica a intenção (`KeywordIntentClassifier`, determinístico, **sem LLM**);
+4. intenção **ambígua** → **pergunta** em linguagem natural (rótulos amigáveis,
+   nunca nomes internos), sem acionar nada;
+5. senão **roteia para UM único handler** (um-cérebro-por-mensagem);
+6. **registra** a interação.
+
+Os handlers ainda são **placeholders honestos** ("🚧 em desenvolvimento") — a
+classificação, o roteamento e o registro são reais e testados. O envio ao
+WhatsApp e os cérebros são passos futuros.
+
+**Log de interação:** grava em `interacoes_log` (via `withTenant`) **só quando há
+tenant**. Interações **pré-tenant** (onboarding/telefone desconhecido) vão só ao
+logger da aplicação, sem persistir e sem dado sensível — a **tabela de auditoria
+pré-tenant será retomada no onboarding** (R-B), para o funil não virar ponto cego.
 
 ## Como rodar
 
@@ -98,23 +126,27 @@ de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 `consentimentos_ia`. Toda tabela de assinante tem RLS habilitado, política por
 tenant e índices nas FKs e colunas de filtro.
 
-## PENDENTE (fora do escopo desta fundação)
+## PENDENTE (fora do escopo atual)
 
 Nada de mock que finja funcionar — o que não foi implementado está explícito:
 
-- **Adapters** (`src/adapters/*`): `payment`, `courts`, `whatsapp`, `llm`,
-  `storage` são **stubs que lançam `NotImplementedError`**. Implementação real em
-  fases próprias.
+- **Adapters externos** (`src/adapters/{payment,courts,whatsapp,llm,storage}`):
+  **stubs que lançam `NotImplementedError`**. Implementação real em fases próprias.
+  (Os adapters de `classifier` e `interaction-log` já são reais.)
+- **Classificador via LLM**: a interface (`IntentClassifier`) está pronta; hoje
+  só o classificador determinístico. Plugar um classificador via `LlmPort` depois.
 - **Onboarding / criação de assinante** (`createAssinanteOnboarding` em
   `identity.ts`): ponto único definido, **não implementado**.
-- **Orquestrador e classificação de intenção** — próximo passo.
-- **Três cérebros**: NL→SQL (Cérebro 1), RAG jurídico (Cérebro 2), tribunais
-  (Cérebro 3) — fases seguintes. `pgvector` (corpus do RAG) ainda não criado.
+- **Auditoria pré-tenant (R-B):** interações sem `assinante_id` não são
+  persistidas hoje. Ao construir o onboarding, **retomar** uma tabela de
+  auditoria pré-tenant para o funil não virar ponto cego.
+- **Captura de `entrada`/`saida` no log**: hoje ficam fora; só após anonimização.
+- **Três cérebros**: NL→SQL (C1), RAG jurídico (C2), tribunais (C3) — fases
+  seguintes. `pgvector` (corpus do RAG) ainda não criado.
 - **Pagamento, WhatsApp real, lembretes, painel admin** — fases seguintes.
-- **Storage**: buckets privados e políticas de acesso por tenant no Storage —
-  a definir na fase de documentos.
-- **Provisionamento Supabase**: criar projeto, configurar pooler e a role de
-  conexão sem `BYPASSRLS`, backups/PITR — operação.
+- **Storage**: buckets privados e políticas por tenant — fase de documentos.
+- **Provisionamento Supabase**: projeto, pooler, role sem `BYPASSRLS`,
+  backups/PITR — operação.
 
 ## Convenções
 
