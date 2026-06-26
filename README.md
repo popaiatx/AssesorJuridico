@@ -88,24 +88,105 @@ configuradas (senão o app sobe com o webhook desabilitado).
 - **Mídia** (imagem/documento/áudio/…): responde placeholder honesto; download e
   Storage ficam **PENDENTE**.
 
-### Verificação manual com a Meta (PENDENTE — exige credenciais reais)
+## LLM (provider-agnostic)
 
-Não há como automatizar isto sem credenciais/URL pública. Passo a passo:
+O acesso ao modelo é por um único port (`LlmPort`); o domínio não conhece o
+provedor. Dois adapters reais — **Anthropic** e **OpenAI** — selecionados por
+config (`LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`). Trocar de provedor/modelo é
+mudar `.env`. A interface já suporta **tool use** e **saída estruturada** (para
+os próximos passos); nenhuma ferramenta de escrita está ligada ainda.
 
-1. Preencha no `.env`: `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`,
-   `WHATSAPP_VERIFY_TOKEN` (string que você escolhe), `WHATSAPP_APP_SECRET`.
-2. `npm run dev` e exponha a porta com um túnel (ex.: `cloudflared tunnel --url
-   http://localhost:3000` ou `ngrok http 3000`) para obter uma URL HTTPS pública.
-3. No painel Meta (WhatsApp > Configuration), configure o **Callback URL**
-   (`https://SEU-TUNEL/webhooks/whatsapp`) e o **Verify Token** igual ao do `.env`;
-   clique em **Verify and Save** → deve passar no handshake (GET).
-4. **Subscribe** ao campo `messages`.
-5. Envie uma mensagem real do seu WhatsApp para o número de teste → você deve
-   receber a resposta do assistente (placeholder honesto desta fase).
-6. **Template:** cadastre/aprovar na Meta um template `lembrete_generico`
-   (categoria utilitária, `pt_BR`, 1 parâmetro) antes de usar envio proativo.
+- **Classificação de intenção via LLM** (`LlmIntentClassifier`) quando o LLM está
+  configurado; **fallback** automático para o `KeywordIntentClassifier` em
+  qualquer falha. Sem LLM, o app usa só o keyword.
+- **Ajuda/conversa geral** respondida pelo LLM (`ajuda`/`outro`). **`duvida_juridica`
+  segue placeholder** — conteúdo jurídico só com fonte/citação (RAG, fase futura).
+- **Segurança:** contexto mínimo ao LLM (vai só o texto da mensagem). Provedor
+  precisa ter **política de não-treinamento + DPA** (ver `.env.example`).
+- **Recomendado em dev:** `LLM_PROVIDER=anthropic`, `LLM_MODEL=claude-haiku-4-5`
+  (barato e rápido — importa para a latência do webhook, §abaixo).
 
-## Como rodar
+## Deploy e ativação (modo desenvolvimento real)
+
+Pronto para hospedagem: o Fastify escuta em `0.0.0.0` e na porta de
+`process.env.PORT` (sem host/porta fixos), com `npm run build` + `npm start` para
+produção. `/health` e o webhook funcionam atrás do HTTPS/proxy de uma plataforma.
+
+> **Latência do webhook:** o processamento (classificação via LLM + handler geral)
+> ocorre **antes do ack** (decisão do Passo 3), e a Meta espera resposta rápida.
+> Por isso o caminho é enxuto e o modelo padrão é o Haiku (rápido). Em **escala de
+> produção**, o caminho é **fila durável** (ack rápido + processamento assíncrono
+> num worker em background) — viável neste host de processo; ver `ESTADO_DO_PROJETO.md`.
+
+### Caminho REAL (URL pública estável)
+
+**1) Provisionar o Supabase (pré-requisito — o app faz fail-fast sem isto):**
+   - Crie um projeto em supabase.com.
+   - Project Settings › API: copie `SUPABASE_URL`, `SUPABASE_ANON_KEY` e a
+     `service_role` (→ `SUPABASE_SERVICE_ROLE_KEY`, **admin only**).
+   - Database › Connection pooling (Supavisor, **transaction**, porta 6543): copie
+     a string → `DATABASE_URL`. A role **não** pode ter BYPASSRLS (ver
+     "RLS e a role de conexão").
+   - Rode as migrações `0001–0013` no projeto:
+     ```bash
+     supabase link --project-ref <REF>
+     supabase db push
+     ```
+
+**2) Deploy num host de processo persistente (Render ou Railway):**
+   - Conecte o repositório do GitHub.
+   - Build: `npm install && npm run build`. Start: `npm start`.
+   - Configure **todas** as variáveis do `.env.example` na plataforma (Supabase,
+     `WHATSAPP_*`, `LLM_*`). **Não** defina `PORT` à mão — a plataforma injeta.
+   - Publique → você recebe uma **URL HTTPS estável**.
+   - *Por que não Vercel:* este é um **servidor persistente** (mantém webhook e
+     pool de conexões), não funções serverless — Render/Railway são o encaixe.
+
+**3) Configurar o webhook na Meta** (Meta for Developers › seu app › WhatsApp):
+   - **Callback URL:** `https://SEU-DOMINIO/webhooks/whatsapp`.
+   - **Verify token:** o mesmo valor de `WHATSAPP_VERIFY_TOKEN` (string que você
+     define; igual nos dois lados). Clique **Verify and Save** (handshake GET).
+   - **Subscribe** ao campo `messages`.
+   - Em API Setup, **adicione seu número** como destinatário de teste.
+
+**4) Seed do assinante de teste** (para seu telefone ser reconhecido em vez de
+   cair no onboarding). Use **exatamente** o número que o WhatsApp envia em `from`
+   (código do país + número, sem `+`):
+   ```bash
+   npm run seed:assinante -- 5511999990001 "Seu Nome"
+   ```
+   (Onboarding real é o próximo passo; este seed é só destrave de dev — usa o
+   cliente admin isolado.)
+
+**5) Trocar mensagens reais:** mande uma mensagem do seu WhatsApp → o ciclo
+   **WhatsApp → orquestrador → LLM → resposta** roda e você recebe a resposta do
+   assistente. Dúvidas gerais/ajuda vêm do LLM; ações seguem placeholders honestos.
+
+### Caminho rápido (iteração local)
+
+```bash
+npm run dev                 # sobe local em http://localhost:$PORT (default 3000)
+ngrok http 3000             # URL HTTPS temporária → use como Callback URL na Meta
+```
+No plano free do ngrok a URL **muda a cada reinício** — refaça o passo 3 quando
+trocar. Para algo estável, use o caminho REAL acima.
+
+## Como rodar (local, sem deploy)
+
+Pré-requisitos: Node 20, e (para o banco) um projeto Supabase ou o Supabase CLI.
+
+```bash
+npm install
+cp .env.example .env      # preencha os valores (NUNCA commite o .env)
+
+# Banco (escolha um):
+supabase start            # Postgres local (requer Docker), ou
+supabase link --project-ref <ref> && supabase db push   # aplica migrações no remoto
+
+npm run dev               # sobe a API em http://localhost:3000
+curl localhost:3000/health        # {"status":"ok"}
+curl localhost:3000/health/ready  # confere o banco (503 se indisponível)
+```
 
 Pré-requisitos: Node 20, e (para o banco) um projeto Supabase ou o Supabase CLI.
 
@@ -156,21 +237,27 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0012)
+## Tabelas (migrações 0001–0013)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`
 (idempotência por `gateway_event_id`), `interacoes_log` (imutável),
 `consentimentos_ia`. Toda tabela de assinante tem RLS habilitado, política por
-tenant e índices nas FKs e colunas de filtro.
+tenant e índices nas FKs e colunas de filtro. A `0013` adiciona as tabelas
+travadas do webhook (`whatsapp_mensagens_processadas`, `whatsapp_contatos_janela`)
+manipuladas só por funções `SECURITY DEFINER`.
 
 ## PENDENTE (fora do escopo atual)
 
 Nada de mock que finja funcionar — o que não foi implementado está explícito:
 
-- **Adapters externos** (`src/adapters/{payment,courts,llm,storage}`): **stubs que
+- **Adapters externos** (`src/adapters/{payment,courts,storage}`): **stubs que
   lançam `NotImplementedError`**. Implementação real em fases próprias. (Os
-  adapters de `classifier`, `interaction-log` e **`whatsapp`** já são reais.)
+  adapters de `classifier`, `interaction-log`, `whatsapp` e **`llm`** já são reais.)
+- **LLM — embeddings e validação real:** `generate` é real (Anthropic/OpenAI);
+  `embed` é **PENDENTE** (fase RAG). Tool use existe no port mas **nenhuma
+  ferramenta de escrita está ligada**. O ciclo real com chave/URL pública é
+  **validação manual** (guia de deploy acima).
 - **WhatsApp — validação manual e mídia:** o adapter é real, mas o handshake/
   entrega reais com a Meta e o template aprovado exigem **verificação manual**
   (passo a passo acima). **Download de mídia + Storage** ficam PENDENTE.

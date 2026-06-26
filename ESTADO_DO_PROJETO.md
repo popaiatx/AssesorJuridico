@@ -6,8 +6,10 @@
 
 ## Fase atual
 
-- **Fase 1 (Núcleo).** Concluído o **Passo 3 — Adapter real do WhatsApp**.
-  Próximo: onboarding / criação de assinante (+ auditoria pré-tenant).
+- **Fase 1 (Núcleo).** Concluído o **Passo 4 — LLM provider-agnostic + ativação
+  em dev**. Próximo: onboarding / criação de assinante (+ auditoria pré-tenant).
+  Falta a **validação manual real** do ciclo (deploy + Meta + chave de LLM) — sua
+  parte, com o guia no README.
 
 ## O que já está pronto
 
@@ -28,7 +30,14 @@
   (200 sucesso / 500 reentrega); **janela de 24h** por contato; envio via
   `CloudApiClient` (HTTP injetável); **mídia** vira placeholder honesto; registro de
   templates (1 inicial); `requireWhatsappConfig` (app sobe sem WhatsApp); fiação no
-  `server`. **70 testes verdes**; migração validada em Postgres 15.
+  `server`. Migração validada em Postgres 15.
+- **Passo 4 — LLM provider-agnostic + ativação em dev.** `LlmPort` com tool use +
+  saída estruturada; adapters **Anthropic** e **OpenAI** (raw HTTP injetável) com
+  seleção por `LLM_PROVIDER`; `requireLlmConfig` (app sobe sem LLM);
+  **`LlmIntentClassifier`** com fallback determinístico; **ajuda/conversa geral via
+  LLM** (`duvida_juridica` segue placeholder — sem conteúdo jurídico sem fonte);
+  `scripts/seed-assinante` (admin isolado) para destravar teste em dev; servidor
+  pronto para hospedagem (`0.0.0.0`/`PORT`, `npm start`). **83 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -48,20 +57,31 @@
 - **Um cérebro por mensagem:** o orquestrador roteia para exatamente um handler;
   se a intenção é ambígua, **pergunta** em vez de adivinhar (rótulos amigáveis,
   nunca nomes internos).
-- **Classificador determinístico** (palavras-chave, sem acento) por enquanto;
-  interface pronta para um classificador via LLM depois.
+- **Classificação:** via LLM quando configurado (`LlmIntentClassifier`), com
+  **fallback determinístico** (palavras-chave) sempre que o LLM falhar ou estiver
+  ausente.
+- **LLM provider-agnostic:** um `LlmPort`, adapters Anthropic/OpenAI trocáveis por
+  `LLM_PROVIDER`. Raw HTTP injetável (testável sem rede). Contexto mínimo ao LLM.
+  **`duvida_juridica` nunca responde conteúdo jurídico sem fonte** (RAG futuro).
 - **Webhook do WhatsApp: processa-antes-do-ack** (sem perder mensagem) +
   **idempotência com lease** (claim→done só após sucesso; falha libera; crash
-  coberto por lease). Fila durável (para ack cedo com segurança) = melhoria futura.
+  coberto por lease). **Fila durável** (ack rápido + worker assíncrono) é o
+  caminho de produção em escala — viável neste host de processo (registrado).
+- **Servidor pronto para hospedagem:** escuta `0.0.0.0`/`process.env.PORT`,
+  `npm start` em produção; Render/Railway (não Vercel — é servidor persistente).
 
 ## PENDENTE (explícito)
 
-- Adapters reais ainda stubs: `payment`, `courts`, `llm`, `storage`.
-  (`whatsapp` já é real.)
-- **WhatsApp — validação manual** (handshake/entrega reais com a Meta, template
-  aprovado, URL pública) e **download de mídia + Storage** (mídia hoje só
-  placeholder). Passo a passo manual no README.
-- **Fila durável do webhook** (permitiria ack cedo) — melhoria futura.
+- Adapters reais ainda stubs: `payment`, `courts`, `storage`.
+  (`whatsapp` e `llm` já são reais.)
+- **Validação manual real (sua parte):** deploy (Supabase + Render/Railway),
+  webhook na Meta, chave de LLM, seed do assinante e troca de mensagens reais —
+  guia no README. Sem isso, nada do ciclo ponta-a-ponta foi validado de verdade.
+- **WhatsApp:** **download de mídia + Storage** (mídia hoje só placeholder);
+  template aprovado na Meta.
+- **LLM:** `embed` (fase RAG) e **nenhuma ferramenta de escrita ligada** ainda
+  (tool use existe no port); anonimização antes de pôr dado de assinante em prompt.
+- **Fila durável do webhook** (ack rápido + worker) — caminho de escala.
 - Onboarding / criação de assinante (`createAssinanteOnboarding`).
 - **Auditoria pré-tenant:** interações sem `assinante_id` (onboarding/telefone
   desconhecido) **não** são gravadas em `interacoes_log` hoje. Quando o onboarding
@@ -70,16 +90,15 @@
 - Os três cérebros: NL→SQL (C1), RAG jurídico (C2), tribunais (C3). `pgvector`
   ainda não criado.
 - Captura de `entrada`/`saida` no log (hoje `null`): só após termos anonimização.
-- Classificador via LLM (interface pronta; impl determinística por enquanto).
 - Provisionamento Supabase (projeto, pooler, role sem BYPASSRLS, backups/PITR).
 - **Pruning** das linhas antigas de `whatsapp_mensagens_processadas` (operação).
 
 ## Próximos passos previstos
 
-1. Onboarding / criação de assinante (máquina de estados) + auditoria pré-tenant.
-2. Cérebros (C1 NL→SQL, depois C2 RAG, C3 tribunais).
-3. Pagamento (Asaas, idempotência de webhook).
-4. Validação manual do WhatsApp com credenciais reais (quando disponíveis).
+1. **Validação manual real** do ciclo (deploy + Meta + LLM + seed) — guia no README.
+2. Onboarding / criação de assinante (máquina de estados) + auditoria pré-tenant.
+3. Cérebros (C1 NL→SQL, depois C2 RAG, C3 tribunais).
+4. Pagamento (Asaas, idempotência de webhook).
 
 ## Como rodar
 
