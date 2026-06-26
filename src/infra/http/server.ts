@@ -11,8 +11,14 @@ import { pingDatabase } from '../db/tenant.js';
 import { resolveAssinanteByPhone } from '../db/identity.js';
 import { Orchestrator } from '../../application/orchestrator.js';
 import { buildDefaultRegistry } from '../../application/handlers/placeholder-handlers.js';
+import { LlmGeneralHandler } from '../../application/handlers/llm-general-handler.js';
 import { KeywordIntentClassifier } from '../../adapters/classifier/keyword-classifier.js';
+import { LlmIntentClassifier } from '../../adapters/classifier/llm-classifier.js';
 import { SupabaseInteractionLog } from '../../adapters/interaction-log/supabase-interaction-log.js';
+import type { IntentClassifier } from '../../core/ports/intent-classifier.js';
+import type { HandlerRegistry } from '../../core/orchestration/handler.js';
+import { getLlmConfig } from '../../adapters/llm/config.js';
+import { createLlmAdapter } from '../../adapters/llm/factory.js';
 import { getWhatsappConfig } from '../../adapters/whatsapp/config.js';
 import { CloudApiClient } from '../../adapters/whatsapp/cloud-api-client.js';
 import { WhatsappAdapter } from '../../adapters/whatsapp/whatsapp-adapter.js';
@@ -46,10 +52,29 @@ export function buildServer(): FastifyInstance {
 
 /** Compõe o orquestrador e, se configurado, o webhook do WhatsApp. */
 function registerWhatsapp(app: FastifyInstance): void {
+  const keyword = new KeywordIntentClassifier();
+  const llmCfg = getLlmConfig();
+
+  let classifier: IntentClassifier = keyword;
+  let registry: HandlerRegistry = buildDefaultRegistry();
+
+  if (llmCfg) {
+    const llm = createLlmAdapter(llmCfg);
+    // LLM classifica (com fallback determinístico) e responde ajuda/conversa geral.
+    classifier = new LlmIntentClassifier(llm, keyword);
+    registry = buildDefaultRegistry({
+      ajuda: new LlmGeneralHandler('ajuda', llm),
+      outro: new LlmGeneralHandler('outro', llm),
+    });
+    app.log.info(`LLM habilitado (${llmCfg.provider}/${llmCfg.model})`);
+  } else {
+    app.log.warn('LLM não configurado — usando classificador por palavras-chave');
+  }
+
   const orchestrator = new Orchestrator({
     resolveAssinante: resolveAssinanteByPhone,
-    classifier: new KeywordIntentClassifier(),
-    registry: buildDefaultRegistry(),
+    classifier,
+    registry,
     interactionLog: new SupabaseInteractionLog(app.log),
   });
 

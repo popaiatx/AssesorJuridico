@@ -55,11 +55,17 @@ function makePlaceholder(intent: Intent): IntentHandler {
   };
 }
 
-/** Registro com EXATAMENTE um handler por intenção (completude testada). */
-export function buildDefaultRegistry(): HandlerRegistry {
+/**
+ * Registro com EXATAMENTE um handler por intenção (completude testada).
+ * `overrides` substitui handlers específicos (ex.: ajuda/outro via LLM) mantendo
+ * placeholders honestos no restante.
+ */
+export function buildDefaultRegistry(
+  overrides: Partial<Record<Intent, IntentHandler>> = {},
+): HandlerRegistry {
   const registry = new Map<Intent, IntentHandler>();
   for (const intent of INTENTS) {
-    registry.set(intent, makePlaceholder(intent));
+    registry.set(intent, overrides[intent] ?? makePlaceholder(intent));
   }
   return registry;
 }
