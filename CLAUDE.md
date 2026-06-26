@@ -65,6 +65,33 @@ Ver a skill `banco-supabase` para os detalhes. Em resumo:
 - **Testes** para: classificação de intenção, NL→SQL (Cérebro 1), recusa-sem-fonte e citação (Cérebro 2), idempotência de webhook, isolamento por assinante.
 - Migrações de banco versionadas (Supabase CLI). Nada de schema improvisado em produção. O tráfego da aplicação usa o **pooler de conexões** do Supabase (modo transaction); `pgvector` para o RAG; **Storage** privado para documentos.
 
+## Configuração e repositório
+
+Convenções **permanentes**, válidas em todas as sessões:
+
+**A) `.env.example` é a fonte única de configuração.** Toda variável do roadmap
+mora lá — agrupada, comentada (o que é, onde obter, em que etapa passa a ser
+exigida) e com placeholder vazio, inclusive as ainda não usadas. A validação por
+Zod (`src/infra/config`) faz **fail-fast só do que já está implementado**; as
+variáveis de etapas futuras ficam **opcionais** e só são exigidas quando o
+adapter correspondente é ativado (cada adapter valida a própria config, ex.:
+`requireWhatsappConfig()`). Todo passo que precise de nova config **adiciona a
+variável no `.env.example` primeiro**, documentada. Nunca commitar `.env` nem
+segredo (o repositório é público no GitHub).
+
+**B) Repositório sempre atualizado.** Remoto: `https://github.com/popaiatx/AssesorJuridico.git`
+(branch `main`). Todo passo termina com **push para o `origin`**. `.env` está no
+`.gitignore`. Se um push falhar por autenticação, **pare e avise** — não tente
+contornar.
+
+**C) `ESTADO_DO_PROJETO.md` (raiz) é o estado vivo do projeto.** Atualizado ao
+**final de cada passo, antes do push**, para permitir retomar o trabalho mesmo
+após reinício de sessão. Contém: fase/passo atual, o que está pronto (resumo por
+passo), decisões técnicas-chave, o que está PENDENTE, próximos passos e como
+rodar (resumo/link do README). É um **resumo do estado, não um changelog** (o git
+guarda o histórico). Ordem de encerramento de cada passo: atualizar
+`ESTADO_DO_PROJETO.md` → commitar → push.
+
 ## Como trabalhar neste repo
 
 - Antes de uma mudança grande, releia `PLANEJAMENTO.md` e a skill relevante; descreva o plano antes de implementar.

@@ -29,16 +29,19 @@ const envSchema = z.object({
   // Banco — caminho da aplicação (pooler Supavisor, modo transaction).
   DATABASE_URL: z.string().url(),
 
-  // --- Adapters externos (PENDENTE) — opcionais nesta fase ---
-  WHATSAPP_API_TOKEN: z.string().optional(),
+  // --- Adapters externos (etapas futuras) — OPCIONAIS aqui ---
+  // Só exigidas quando o adapter correspondente for ativado (cada adapter
+  // valida a própria config). Nomes canônicos: ver .env.example.
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
-  WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+  WHATSAPP_VERIFY_TOKEN: z.string().optional(),
   WHATSAPP_APP_SECRET: z.string().optional(),
-  PAYMENT_API_KEY: z.string().optional(),
-  PAYMENT_WEBHOOK_SECRET: z.string().optional(),
+  ASAAS_API_KEY: z.string().optional(),
+  ASAAS_WEBHOOK_SECRET: z.string().optional(),
   COURTS_API_KEY: z.string().optional(),
   COURTS_WEBHOOK_SECRET: z.string().optional(),
   LLM_API_KEY: z.string().optional(),
+  LLM_MODEL: z.string().optional(),
 });
 
 export type Config = z.infer<typeof envSchema>;
