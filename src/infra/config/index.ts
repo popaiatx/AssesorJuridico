@@ -40,8 +40,9 @@ const envSchema = z.object({
   ASAAS_WEBHOOK_SECRET: z.string().optional(),
   COURTS_API_KEY: z.string().optional(),
   COURTS_WEBHOOK_SECRET: z.string().optional(),
-  LLM_API_KEY: z.string().optional(),
+  LLM_PROVIDER: z.enum(['anthropic', 'openai']).optional(),
   LLM_MODEL: z.string().optional(),
+  LLM_API_KEY: z.string().optional(),
 });
 
 export type Config = z.infer<typeof envSchema>;
