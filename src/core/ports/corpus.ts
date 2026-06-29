@@ -57,6 +57,20 @@ export interface NormaSyncUpdate {
   revogadaEm: string | null; // ISO date
 }
 
+/**
+ * Operações de escrita do corpus usadas pelo MOTOR de sync (back-office). Abstrai a
+ * infra para o motor ser testável com fakes. A implementação real grava via `pool`.
+ */
+export interface CorpusSyncStore {
+  getNormaState(identificador: string): Promise<NormaSyncState | null>;
+  upsertNorma(n: NormaInput): Promise<string>;
+  /** Substitui TODOS os trechos da norma (delete + insert) de forma atômica. */
+  replaceTrechos(normaId: string, trechos: TrechoInput[]): Promise<void>;
+  updateNormaSync(normaId: string, s: NormaSyncUpdate): Promise<void>;
+  startRun(fonte: string): Promise<string>;
+  finishRun(id: string, r: SyncRunResult): Promise<void>;
+}
+
 export type SyncRunStatus = 'sucesso' | 'parcial' | 'erro';
 
 /** Resultado consolidado de uma execução de sync (auditoria). */

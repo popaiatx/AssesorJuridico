@@ -72,6 +72,23 @@ export async function insertTrecho(normaId: string, t: TrechoInput): Promise<voi
   `;
 }
 
+/** Ingestão/sync: substitui TODOS os trechos da norma (delete + insert) numa
+ *  ÚNICA transação, para nunca deixar a norma sem trechos por falha parcial. */
+export async function replaceTrechos(normaId: string, trechos: TrechoInput[]): Promise<void> {
+  await pool.begin(async (tx) => {
+    await tx`delete from corpus_trechos where norma_id = ${normaId}`;
+    for (const t of trechos) {
+      await tx`
+        insert into corpus_trechos
+          (norma_id, artigo, paragrafo, inciso, ordem, texto, citacao, fonte_url, embedding)
+        values
+          (${normaId}, ${t.artigo}, ${t.paragrafo}, ${t.inciso}, ${t.ordem}, ${t.texto},
+           ${t.citacao}, ${t.fonteUrl}, ${vectorLiteral(t.embedding)}::vector)
+      `;
+    }
+  });
+}
+
 // --- Sincronização (Passo 8B, back-office) ---
 
 /** Estado de sync de uma norma, lido por identificador (null se ainda não existe). */
@@ -90,12 +107,14 @@ export async function getNormaSyncState(identificador: string): Promise<NormaSyn
 
 /** Atualiza os metadados de sync da norma (hash/versão/última sync + revogação). */
 export async function updateNormaSync(normaId: string, s: NormaSyncUpdate): Promise<void> {
+  // coalesce em revogada_em: passar null PRESERVA a data anterior (nunca apaga uma
+  // revogação já registrada num re-sync); passar uma data registra a transição.
   await pool`
     update corpus_normas set
       fonte_hash = ${s.fonteHash},
       fonte_versao = ${s.fonteVersao},
       ultima_sincronizacao = ${s.ultimaSincronizacao}::timestamptz,
-      revogada_em = ${s.revogadaEm}::date
+      revogada_em = coalesce(${s.revogadaEm}::date, revogada_em)
     where id = ${normaId}
   `;
 }
