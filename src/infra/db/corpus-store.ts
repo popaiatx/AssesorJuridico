@@ -7,7 +7,14 @@
  *    Não usa service_role; corpus não tem RLS de tenant.
  */
 import { pool } from './pool.js';
-import type { CorpusTrecho, NormaInput, TrechoInput } from '../../core/ports/corpus.js';
+import type {
+  CorpusTrecho,
+  NormaInput,
+  NormaSyncState,
+  NormaSyncUpdate,
+  SyncRunResult,
+  TrechoInput,
+} from '../../core/ports/corpus.js';
 
 function vectorLiteral(embedding: number[]): string {
   return `[${embedding.join(',')}]`;
@@ -62,5 +69,63 @@ export async function insertTrecho(normaId: string, t: TrechoInput): Promise<voi
     values
       (${normaId}, ${t.artigo}, ${t.paragrafo}, ${t.inciso}, ${t.ordem}, ${t.texto},
        ${t.citacao}, ${t.fonteUrl}, ${vectorLiteral(t.embedding)}::vector)
+  `;
+}
+
+// --- Sincronização (Passo 8B, back-office) ---
+
+/** Estado de sync de uma norma, lido por identificador (null se ainda não existe). */
+export async function getNormaSyncState(identificador: string): Promise<NormaSyncState | null> {
+  const rows = await pool<
+    { id: string; fonte_hash: string | null; vigencia_status: string | null }[]
+  >`
+    select id, fonte_hash, vigencia_status
+    from corpus_normas
+    where identificador = ${identificador}
+  `;
+  const r = rows[0];
+  if (!r) return null;
+  return { id: r.id, fonteHash: r.fonte_hash, vigenciaStatus: r.vigencia_status };
+}
+
+/** Atualiza os metadados de sync da norma (hash/versão/última sync + revogação). */
+export async function updateNormaSync(normaId: string, s: NormaSyncUpdate): Promise<void> {
+  await pool`
+    update corpus_normas set
+      fonte_hash = ${s.fonteHash},
+      fonte_versao = ${s.fonteVersao},
+      ultima_sincronizacao = ${s.ultimaSincronizacao}::timestamptz,
+      revogada_em = ${s.revogadaEm}::date
+    where id = ${normaId}
+  `;
+}
+
+/** Quantidade de trechos de uma norma (apoio a verificação/idempotência). */
+export async function countTrechos(normaId: string): Promise<number> {
+  const rows = await pool<{ n: number }[]>`
+    select count(*)::int as n from corpus_trechos where norma_id = ${normaId}
+  `;
+  return rows[0]?.n ?? 0;
+}
+
+/** Abre um registro de execução de sync e retorna seu id. */
+export async function startSyncRun(fonte: string): Promise<string> {
+  const rows = await pool<{ id: string }[]>`
+    insert into corpus_sync_runs (fonte) values (${fonte}) returning id
+  `;
+  return rows[0]!.id;
+}
+
+/** Fecha o registro de execução de sync com o resultado. */
+export async function finishSyncRun(id: string, r: SyncRunResult): Promise<void> {
+  await pool`
+    update corpus_sync_runs set
+      finalizado_em = now(),
+      status = ${r.status},
+      normas_verificadas = ${r.normasVerificadas},
+      normas_atualizadas = ${r.normasAtualizadas},
+      normas_revogadas = ${r.normasRevogadas},
+      erros = ${JSON.stringify(r.erros)}::jsonb
+    where id = ${id}
   `;
 }

@@ -43,8 +43,21 @@ describe('OpenAiEmbeddingsAdapter', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('factory seleciona OpenAI; getEmbeddingsConfig null sem env', () => {
+  it('factory seleciona OpenAI; getEmbeddingsConfig reflete o ambiente', () => {
     expect(createEmbeddingsAdapter(cfg)).toBeInstanceOf(OpenAiEmbeddingsAdapter);
-    expect(getEmbeddingsConfig()).toBeNull(); // vitest não define EMBEDDINGS_*
+    // Independe do ambiente: se as EMBEDDINGS_* estiverem setadas (.env), devolve a
+    // config; senão, null. (Não assume um .env específico nem expõe segredo.)
+    const temEnv = Boolean(
+      process.env.EMBEDDINGS_PROVIDER &&
+        process.env.EMBEDDINGS_MODEL &&
+        process.env.EMBEDDINGS_API_KEY,
+    );
+    const got = getEmbeddingsConfig();
+    if (temEnv) {
+      expect(got?.provider).toBe('openai');
+      expect(got?.model).toBeTruthy();
+    } else {
+      expect(got).toBeNull();
+    }
   });
 });

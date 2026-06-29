@@ -39,3 +39,32 @@ export interface TrechoInput {
   fonteUrl: string | null;
   embedding: number[];
 }
+
+// --- Tipos da sincronização (Passo 8B, back-office) ---
+
+/** Estado mínimo de uma norma para decidir o que sincronizar. */
+export interface NormaSyncState {
+  id: string;
+  fonteHash: string | null;
+  vigenciaStatus: string | null;
+}
+
+/** Campos de sync gravados após processar uma norma. */
+export interface NormaSyncUpdate {
+  fonteHash: string;
+  fonteVersao: string | null;
+  ultimaSincronizacao: string; // ISO
+  revogadaEm: string | null; // ISO date
+}
+
+export type SyncRunStatus = 'sucesso' | 'parcial' | 'erro';
+
+/** Resultado consolidado de uma execução de sync (auditoria). */
+export interface SyncRunResult {
+  status: SyncRunStatus;
+  normasVerificadas: number;
+  normasAtualizadas: number;
+  normasRevogadas: number;
+  /** Erros e avisos de revisão: [{ identificador, erro }]. */
+  erros: Array<{ identificador: string; erro: string }>;
+}
