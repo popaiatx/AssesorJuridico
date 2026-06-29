@@ -8,15 +8,11 @@
  */
 import { pool } from './pool.js';
 import { withTenant } from './tenant.js';
-
-export interface PaymentSubscriptionRow {
-  status: string;
-  cobrancaUrl: string | null;
-  gatewayCustomerId: string | null;
-  gatewayRef: string | null;
-  nome: string;
-  email: string | null;
-}
+import type {
+  ApplyAsaasEventInput,
+  PaymentSubscriptionRow,
+  SaveCobrancaInput,
+} from '../../core/ports/payment-store.js';
 
 /** Lê a assinatura + nome/e-mail do assinante (tenant) para montar a cobrança. */
 export async function getSubscriptionForPayment(
@@ -53,13 +49,6 @@ export async function getSubscriptionForPayment(
   });
 }
 
-export interface SaveCobrancaInput {
-  status: string;
-  cobrancaUrl: string;
-  gatewayRef: string;
-  gatewayCustomerId: string;
-}
-
 /** Salva a cobrança aberta e o estado (tenant). */
 export async function saveCobranca(assinanteId: string, fields: SaveCobrancaInput): Promise<void> {
   await withTenant(assinanteId, async (tx) => {
@@ -73,15 +62,6 @@ export async function saveCobranca(assinanteId: string, fields: SaveCobrancaInpu
       where assinante_id = ${assinanteId}
     `;
   });
-}
-
-export interface ApplyAsaasEventInput {
-  gatewayEventId: string;
-  assinanteId: string;
-  tipo: string;
-  novoStatus: string | null;
-  proximoVencimento: string | null;
-  payload: unknown;
 }
 
 /** Aplica o evento do webhook (idempotente). `true` se foi aplicado agora. */

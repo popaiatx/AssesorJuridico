@@ -20,6 +20,17 @@ import { SupabaseOnboardingStore } from '../../adapters/onboarding/supabase-onbo
 import { SupabasePreTenantAudit } from '../../adapters/pre-tenant-audit/supabase-pre-tenant-audit.js';
 import { SupabaseSubscriptionGate } from '../../adapters/subscription/supabase-subscription-gate.js';
 import { PaymentRequiredHandler } from '../../application/handlers/payment-required-handler.js';
+import { AsaasPaymentHandler } from '../../application/handlers/asaas-payment-handler.js';
+import { AsaasWebhookProcessor } from '../../application/asaas-webhook-processor.js';
+import { AsaasAdapter } from '../../adapters/payment/asaas-adapter.js';
+import { getAsaasConfig } from '../../adapters/payment/config.js';
+import { asaasRoutes } from './asaas-routes.js';
+import {
+  applyAsaasEvent,
+  getSubscriptionForPayment,
+  saveCobranca,
+} from '../db/payment-store.js';
+import type { BlockedHandler } from '../../application/orchestrator.js';
 import type { IntentClassifier } from '../../core/ports/intent-classifier.js';
 import type { HandlerRegistry, IntentHandler } from '../../core/orchestration/handler.js';
 import type { Intent } from '../../core/domain/intents.js';
@@ -84,6 +95,29 @@ function registerWhatsapp(app: FastifyInstance): void {
 
   const registry: HandlerRegistry = buildDefaultRegistry(overrides);
 
+  // Pagamento: com Asaas configurado, gera/reenvia link real e registra o webhook;
+  // sem Asaas, o bloqueio responde o placeholder honesto (app sobe sem pagamento).
+  const asaasCfg = getAsaasConfig();
+  let paymentRequiredHandler: BlockedHandler;
+  if (asaasCfg) {
+    const payment = new AsaasAdapter(asaasCfg);
+    paymentRequiredHandler = new AsaasPaymentHandler({
+      payment,
+      getSubscription: getSubscriptionForPayment,
+      saveCobranca,
+    });
+    const processor = new AsaasWebhookProcessor({
+      payment,
+      applyEvent: applyAsaasEvent,
+      logger: app.log,
+    });
+    void app.register(asaasRoutes({ adapter: payment, processor }));
+    app.log.info(`Asaas habilitado (${asaasCfg.env}) — webhook em /webhooks/asaas`);
+  } else {
+    paymentRequiredHandler = new PaymentRequiredHandler();
+    app.log.warn('Asaas não configurado — bloqueio pós-trial usa placeholder honesto');
+  }
+
   const orchestrator = new Orchestrator({
     resolveAssinante: resolveAssinanteByPhone,
     classifier,
@@ -91,7 +125,7 @@ function registerWhatsapp(app: FastifyInstance): void {
     interactionLog: new SupabaseInteractionLog(app.log),
     // Porteiro: bloqueia tudo após o trial (fail-closed) e desvia para pagamento.
     gate: new SupabaseSubscriptionGate(),
-    paymentRequiredHandler: new PaymentRequiredHandler(),
+    paymentRequiredHandler,
   });
 
   const wcfg = getWhatsappConfig();
