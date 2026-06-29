@@ -60,6 +60,4 @@ export interface LlmGenerateResult {
 
 export interface LlmPort {
   generate(params: LlmGenerateParams): Promise<LlmGenerateResult>;
-  /** Embeddings para o RAG (Cérebro 2). PENDENTE nesta fase. */
-  embed(texts: string[]): Promise<number[][]>;
 }

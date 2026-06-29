@@ -20,9 +20,6 @@ class FakeLlm implements LlmPort {
     this.calls.push(p);
     return Promise.resolve(this.responder(p));
   }
-  embed(): Promise<number[][]> {
-    return Promise.reject(new Error('n/a'));
-  }
 }
 
 function toolCall(name: string, input: Record<string, unknown>): LlmGenerateResult {

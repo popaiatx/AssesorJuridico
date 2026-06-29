@@ -44,6 +44,12 @@ const envSchema = z.object({
   LLM_PROVIDER: z.enum(['anthropic', 'openai']).optional(),
   LLM_MODEL: z.string().optional(),
   LLM_API_KEY: z.string().optional(),
+  // Embeddings (RAG / Cérebro 2) — provedor próprio (Anthropic não tem embeddings).
+  EMBEDDINGS_PROVIDER: z.enum(['openai']).optional(),
+  EMBEDDINGS_MODEL: z.string().optional(),
+  EMBEDDINGS_API_KEY: z.string().optional(),
+  // Limiar mínimo de similaridade para um trecho ser "fonte" de afirmação.
+  RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.3),
 });
 
 export type Config = z.infer<typeof envSchema>;

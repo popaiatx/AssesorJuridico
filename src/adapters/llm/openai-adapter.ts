@@ -2,7 +2,6 @@
  * Adapter de LLM — OpenAI, via Chat Completions API em raw HTTP.
  * `system` vira a primeira mensagem; saída estruturada via `response_format`.
  */
-import { NotImplementedError } from '../../core/errors.js';
 import type {
   LlmGenerateParams,
   LlmGenerateResult,
@@ -109,10 +108,5 @@ export class OpenAiLlmAdapter implements LlmPort {
       toolCalls,
       stopReason: choice?.finish_reason ?? 'stop',
     };
-  }
-
-  embed(_texts: string[]): Promise<number[][]> {
-    // OpenAI tem embeddings, mas é da fase RAG (Cérebro 2). PENDENTE.
-    throw new NotImplementedError('Embeddings OpenAI não implementado (PENDENTE).');
   }
 }

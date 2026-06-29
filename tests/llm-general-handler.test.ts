@@ -10,9 +10,6 @@ class FakeLlm implements LlmPort {
     if (this.outcome instanceof Error) return Promise.reject(this.outcome);
     return Promise.resolve(this.outcome);
   }
-  embed(): Promise<number[][]> {
-    return Promise.reject(new Error('n/a'));
-  }
 }
 
 const ctx: MessageContext = {

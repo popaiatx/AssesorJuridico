@@ -3,7 +3,6 @@
  * Não envia `temperature` (removido nos modelos novos → 400). `system` no topo;
  * saída estruturada via `output_config.format`.
  */
-import { NotImplementedError } from '../../core/errors.js';
 import type {
   LlmGenerateParams,
   LlmGenerateResult,
@@ -100,10 +99,5 @@ export class AnthropicLlmAdapter implements LlmPort {
       }
     }
     return { text, toolCalls, stopReason: parsed.stop_reason ?? 'end_turn' };
-  }
-
-  embed(_texts: string[]): Promise<number[][]> {
-    // Anthropic não tem API de embeddings nativa; PENDENTE (fase RAG).
-    throw new NotImplementedError('Embeddings Anthropic não implementado (PENDENTE).');
   }
 }
