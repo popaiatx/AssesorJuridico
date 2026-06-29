@@ -6,7 +6,7 @@
  * cria o assinante (trial) pelo ponto único controlado. Criado o assinante, a
  * próxima mensagem do telefone resolve para o tenant e segue o caminho normal.
  */
-import { advanceOnboarding, CONSENT_VERSION } from '../../core/domain/onboarding.js';
+import { advanceOnboarding, CONSENT_VERSION, TRIAL_DIAS } from '../../core/domain/onboarding.js';
 import type { HandlerResult, IntentHandler, MessageContext } from '../../core/orchestration/handler.js';
 import type { Intent } from '../../core/domain/intents.js';
 import type { AssinanteCreator } from '../../core/ports/assinante-creator.js';
@@ -33,12 +33,10 @@ export class OnboardingHandler implements IntentHandler {
       await this.deps.createAssinante({
         telefone: phone,
         nome: outcome.dados.nome,
-        oabNumero: outcome.dados.oabNumero,
-        oabSeccional: outcome.dados.oabSeccional,
-        documento: outcome.dados.documento,
         email: outcome.dados.email,
         consentVersao: CONSENT_VERSION,
         canal: 'whatsapp',
+        trialDias: TRIAL_DIAS,
       });
       await this.deps.store.clear(phone);
       await this.deps.audit.record({ phone, etapa: 'concluido', evento: outcome.evento });

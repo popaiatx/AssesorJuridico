@@ -36,20 +36,18 @@ export async function resolveAssinanteByPhone(phone: string): Promise<string | n
 export interface CreateAssinanteOnboardingInput {
   telefone: string;
   nome: string;
-  oabNumero: string;
-  oabSeccional: string;
-  documento: string;
   email: string | null;
   consentVersao: string;
   canal: string;
+  trialDias: number;
 }
 
 /**
  * Cria o assinante no onboarding — PONTO ÚNICO de criação. Insere o assinante em
- * TRIAL e grava o consentimento de IA atomicamente, via a função SECURITY DEFINER
- * `app.create_assinante_onboarding` (migração 0014). Roda no caminho da mensagem,
- * por isso NÃO usa service_role (consistente com `resolveAssinanteByPhone`).
- * Retorna o `assinante_id`.
+ * TRIAL (oab/documento nulos), grava o consentimento de IA e cria a linha em
+ * `assinaturas` (status trial, `trial_fim = now() + trialDias`) atomicamente, via
+ * a função SECURITY DEFINER `app.create_assinante_onboarding` (migração 0015).
+ * Roda no caminho da mensagem, por isso NÃO usa service_role. Retorna o `assinante_id`.
  */
 export async function createAssinanteOnboarding(
   input: CreateAssinanteOnboardingInput,
@@ -59,8 +57,8 @@ export async function createAssinanteOnboarding(
   }
   const rows = await pool<{ id: string }[]>`
     select app.create_assinante_onboarding(
-      ${input.telefone}, ${input.nome}, ${input.oabNumero}, ${input.oabSeccional},
-      ${input.documento}, ${input.email ?? ''}, ${input.consentVersao}, ${input.canal}
+      ${input.telefone}, ${input.nome}, ${input.email ?? ''},
+      ${input.consentVersao}, ${input.canal}, ${input.trialDias}
     ) as id
   `;
   const id = rows[0]?.id;

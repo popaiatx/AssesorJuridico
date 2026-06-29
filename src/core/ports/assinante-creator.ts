@@ -6,12 +6,10 @@
 export interface CreateAssinanteInput {
   telefone: string;
   nome: string;
-  oabNumero: string;
-  oabSeccional: string;
-  documento: string;
   email: string | null;
   consentVersao: string;
   canal: string;
+  trialDias: number;
 }
 
 /** Cria o assinante (trial) + consentimento e retorna o `assinante_id`. */
