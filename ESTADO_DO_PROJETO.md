@@ -6,10 +6,11 @@
 
 ## Fase atual
 
-- **Fase 1 (Núcleo).** Concluído o **Passo 4 — LLM provider-agnostic + ativação
-  em dev**. Próximo: onboarding / criação de assinante (+ auditoria pré-tenant).
-  Falta a **validação manual real** do ciclo (deploy + Meta + chave de LLM) — sua
-  parte, com o guia no README.
+- **Fase 1 (Núcleo).** Concluído o **Passo 5 — Onboarding + criação de assinante**.
+  Ciclo no WhatsApp já validado em produção (Railway) nos passos anteriores;
+  falta **validar em produção o fluxo de número novo** (onboarding completo →
+  trial) — sua parte, com o guia no README (`reset:assinante` ou 2º número).
+  Próximo: cérebros (C1 NL→SQL) ou pagamento (Asaas).
 
 ## O que já está pronto
 
@@ -37,7 +38,15 @@
   **`LlmIntentClassifier`** com fallback determinístico; **ajuda/conversa geral via
   LLM** (`duvida_juridica` segue placeholder — sem conteúdo jurídico sem fonte);
   `scripts/seed-assinante` (admin isolado) para destravar teste em dev; servidor
-  pronto para hospedagem (`0.0.0.0`/`PORT`, `npm start`). **83 testes verdes.**
+  pronto para hospedagem (`0.0.0.0`/`PORT`, `npm start`).
+- **Passo 5 — Onboarding + criação de assinante.** Máquina de estados
+  **determinística** (nome→OAB→CPF/CNPJ→e-mail→consentimento→criar) que sobrevive
+  entre mensagens (`onboarding_estado`, tabela travada); validadores CPF/CNPJ
+  (dígito), OAB (UF), e-mail; robustez R1 (cancelar/recomeçar, vazio/off-script);
+  criação atômica em **trial** + consentimento via SECURITY DEFINER (sem
+  service_role no caminho da mensagem); **auditoria pré-tenant** com telefone em
+  hash (fecha R-B); `reset:assinante` para testar número novo. Migração 0014
+  validada em Postgres 15. **102 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -69,36 +78,37 @@
   caminho de produção em escala — viável neste host de processo (registrado).
 - **Servidor pronto para hospedagem:** escuta `0.0.0.0`/`process.env.PORT`,
   `npm start` em produção; Render/Railway (não Vercel — é servidor persistente).
+- **Onboarding determinístico** (sem LLM no controle de fluxo); criação em **trial**
+  por ponto único SECURITY DEFINER; consentimento gravado (versão + timestamp);
+  **auditoria pré-tenant com telefone em hash** (fecha o R-B).
 
 ## PENDENTE (explícito)
 
 - Adapters reais ainda stubs: `payment`, `courts`, `storage`.
   (`whatsapp` e `llm` já são reais.)
-- **Validação manual real (sua parte):** deploy (Supabase + Render/Railway),
-  webhook na Meta, chave de LLM, seed do assinante e troca de mensagens reais —
-  guia no README. Sem isso, nada do ciclo ponta-a-ponta foi validado de verdade.
+- **Validar em produção o fluxo de número novo** (onboarding completo → trial →
+  conversar) — guia no README (`reset:assinante` ou 2º número). (O ciclo
+  mensagem→LLM→resposta já foi validado em produção.)
+- **Onboarding — verificação real da inscrição na OAB** contra fonte externa
+  (hoje só valida formato número+UF).
 - **WhatsApp:** **download de mídia + Storage** (mídia hoje só placeholder);
   template aprovado na Meta.
 - **LLM:** `embed` (fase RAG) e **nenhuma ferramenta de escrita ligada** ainda
   (tool use existe no port); anonimização antes de pôr dado de assinante em prompt.
 - **Fila durável do webhook** (ack rápido + worker) — caminho de escala.
-- Onboarding / criação de assinante (`createAssinanteOnboarding`).
-- **Auditoria pré-tenant:** interações sem `assinante_id` (onboarding/telefone
-  desconhecido) **não** são gravadas em `interacoes_log` hoje. Quando o onboarding
-  for construído, **retomar** uma tabela de auditoria pré-tenant para o funil de
-  onboarding não virar ponto cego.
 - Os três cérebros: NL→SQL (C1), RAG jurídico (C2), tribunais (C3). `pgvector`
   ainda não criado.
 - Captura de `entrada`/`saida` no log (hoje `null`): só após termos anonimização.
 - Provisionamento Supabase (projeto, pooler, role sem BYPASSRLS, backups/PITR).
-- **Pruning** das linhas antigas de `whatsapp_mensagens_processadas` (operação).
+- **Pruning** das linhas antigas de `whatsapp_mensagens_processadas` e
+  `onboarding_estado` abandonados (operação).
 
 ## Próximos passos previstos
 
-1. **Validação manual real** do ciclo (deploy + Meta + LLM + seed) — guia no README.
-2. Onboarding / criação de assinante (máquina de estados) + auditoria pré-tenant.
-3. Cérebros (C1 NL→SQL, depois C2 RAG, C3 tribunais).
-4. Pagamento (Asaas, idempotência de webhook).
+1. **Validar em produção o onboarding de número novo** → trial (guia no README).
+2. Cérebros: C1 (NL→SQL — dados do escritório) ou C2 (RAG jurídico).
+3. Pagamento (Asaas, idempotência de webhook) — tirar do stub.
+4. Verificação real da OAB; mídia→Storage; fila durável do webhook.
 
 ## Como rodar
 

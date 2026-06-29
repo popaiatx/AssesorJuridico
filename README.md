@@ -106,6 +106,27 @@ os próximos passos); nenhuma ferramenta de escrita está ligada ainda.
 - **Recomendado em dev:** `LLM_PROVIDER=anthropic`, `LLM_MODEL=claude-haiku-4-5`
   (barato e rápido — importa para a latência do webhook, §abaixo).
 
+## Onboarding (cadastro de número novo)
+
+Quando um número **não cadastrado** escreve, o orquestrador roteia para o
+`OnboardingHandler` — uma **máquina de estados determinística** (sem LLM
+decidindo fluxo), que sobrevive entre mensagens:
+
+`boas-vindas → nome → OAB (número + seccional) → CPF/CNPJ → e-mail → termo de uso
+de IA (aceite ativo) → criação do assinante (status trial) → ativação + tutorial`.
+
+- **Validação** de cada campo (OAB com UF válida; CPF/CNPJ com dígito verificador;
+  e-mail). **Verificação real da inscrição na OAB contra fonte externa = PENDENTE.**
+- **Robustez:** `cancelar`/`recomeçar` reinicia; mensagem fora do roteiro ou só
+  mídia → re-explica e permanece na etapa (nunca pula validação).
+- **Criação:** ponto único `app.create_assinante_onboarding` (SECURITY DEFINER,
+  **sem service_role no caminho da mensagem**) — cria o assinante (trial) e grava
+  o consentimento (versão + timestamp) atomicamente. Criado o assinante, a próxima
+  mensagem resolve para o tenant e segue o caminho normal (`withTenant`).
+- **Auditoria pré-tenant** (`onboarding_eventos`, tabela travada): registra o funil
+  com o **telefone em hash** (sem dado sensível em claro) — fecha o ponto cego R-B.
+- **Trial:** a conta entra em teste; **pagamento segue stub** (sem cobrança).
+
 ## Deploy e ativação (modo desenvolvimento real)
 
 Pronto para hospedagem: o Fastify escuta em `0.0.0.0` e na porta de
@@ -149,18 +170,22 @@ produção. `/health` e o webhook funcionam atrás do HTTPS/proxy de uma platafo
    - **Subscribe** ao campo `messages`.
    - Em API Setup, **adicione seu número** como destinatário de teste.
 
-**4) Seed do assinante de teste** (para seu telefone ser reconhecido em vez de
-   cair no onboarding). Use **exatamente** o número que o WhatsApp envia em `from`
-   (código do país + número, sem `+`):
-   ```bash
-   npm run seed:assinante -- 5511999990001 "Seu Nome"
-   ```
-   (Onboarding real é o próximo passo; este seed é só destrave de dev — usa o
-   cliente admin isolado.)
+**4) Testar o fluxo de NÚMERO NOVO (onboarding):** o onboarding agora é a porta
+   de entrada — não precisa de seed para um número novo. De um número **não**
+   cadastrado, mande uma mensagem e siga o cadastro até virar assinante trial.
+   - Como **seu** número já é assinante (do seed do Passo 4), há dois caminhos para
+     re-testar o onboarding em produção:
+     - **Reset (recomendado):** `npm run reset:assinante -- 5511999990001`
+       (telefone exatamente como o WhatsApp envia em `from`: país+número, sem `+`).
+       Remove o assinante e limpa o estado → a próxima mensagem cai no onboarding.
+     - **Segundo número:** no painel da Meta (API Setup), adicione outro número
+       como destinatário de teste e faça o onboarding por ele.
+   - O **seed** (`npm run seed:assinante -- <tel> "Nome"`) continua disponível para
+     criar um assinante direto, pulando o onboarding (atalho de dev).
 
-**5) Trocar mensagens reais:** mande uma mensagem do seu WhatsApp → o ciclo
-   **WhatsApp → orquestrador → LLM → resposta** roda e você recebe a resposta do
-   assistente. Dúvidas gerais/ajuda vêm do LLM; ações seguem placeholders honestos.
+**5) Trocar mensagens reais:** de um número novo, passe pelo onboarding → conta
+   trial criada → o ciclo **WhatsApp → orquestrador → LLM → resposta** passa a
+   valer. Dúvidas gerais/ajuda vêm do LLM; ações seguem placeholders honestos.
 
 ### Caminho rápido (iteração local)
 
@@ -245,6 +270,7 @@ de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 `consentimentos_ia`. Toda tabela de assinante tem RLS habilitado, política por
 tenant e índices nas FKs e colunas de filtro. A `0013` adiciona as tabelas
 travadas do webhook (`whatsapp_mensagens_processadas`, `whatsapp_contatos_janela`)
+e a `0014` as do onboarding (`onboarding_estado`, `onboarding_eventos`) —
 manipuladas só por funções `SECURITY DEFINER`.
 
 ## PENDENTE (fora do escopo atual)
@@ -263,13 +289,8 @@ Nada de mock que finja funcionar — o que não foi implementado está explícit
   (passo a passo acima). **Download de mídia + Storage** ficam PENDENTE.
 - **Durabilidade do webhook:** hoje processa-antes-do-ack (sem perda). Uma **fila
   durável** permitiria ack cedo com segurança — melhoria futura.
-- **Classificador via LLM**: a interface (`IntentClassifier`) está pronta; hoje
-  só o classificador determinístico. Plugar um classificador via `LlmPort` depois.
-- **Onboarding / criação de assinante** (`createAssinanteOnboarding` em
-  `identity.ts`): ponto único definido, **não implementado**.
-- **Auditoria pré-tenant (R-B):** interações sem `assinante_id` não são
-  persistidas hoje. Ao construir o onboarding, **retomar** uma tabela de
-  auditoria pré-tenant para o funil não virar ponto cego.
+- **Onboarding — verificação real da OAB:** o cadastro valida o **formato** da OAB
+  (número + UF), mas a **conferência da inscrição contra fonte externa** é PENDENTE.
 - **Captura de `entrada`/`saida` no log**: hoje ficam fora; só após anonimização.
 - **Três cérebros**: NL→SQL (C1), RAG jurídico (C2), tribunais (C3) — fases
   seguintes. `pgvector` (corpus do RAG) ainda não criado.
