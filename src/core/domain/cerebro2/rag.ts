@@ -13,6 +13,8 @@ export interface RagTrecho {
   citacao: string;
   texto: string;
   fonteUrl: string | null;
+  /** Vigência da norma-mãe; 'revogada' nunca vira afirmação validada. */
+  vigenciaStatus?: string | null;
 }
 
 export interface RagAfirmacao {
@@ -43,8 +45,14 @@ export function composeRagReply(input: {
 }): RagComposition {
   const { pertinentes, aproximados, llm } = input;
 
-  // Allowlist: afirmação só vale se a fonte estiver entre os trechos recuperados.
-  const validSet = new Set(pertinentes.map((t) => t.citacao));
+  // Vigência: norma REVOGADA nunca entra no allowlist de afirmação — no máximo é
+  // sinalizada como existente-porém-revogada (transparência, nunca como base vigente).
+  const revogado = (t: RagTrecho): boolean => t.vigenciaStatus === 'revogada';
+  const pertinentesVigentes = pertinentes.filter((t) => !revogado(t));
+  const pertinentesRevogados = pertinentes.filter(revogado);
+
+  // Allowlist: afirmação só vale se a fonte estiver entre os trechos VIGENTES recuperados.
+  const validSet = new Set(pertinentesVigentes.map((t) => t.citacao));
   const validas = llm.recusou ? [] : llm.afirmacoes.filter((a) => validSet.has(a.fonte));
   const fontesValidas = [...new Set(validas.map((a) => a.fonte))];
 
@@ -54,7 +62,7 @@ export function composeRagReply(input: {
     parts.push('📚 Com base no acervo:');
     for (const a of validas) parts.push(`• ${a.texto} (${a.fonte})`);
     const linhas = fontesValidas.map((f) => {
-      const t = pertinentes.find((p) => p.citacao === f);
+      const t = pertinentesVigentes.find((p) => p.citacao === f);
       return t?.fonteUrl ? `${f} — ${t.fonteUrl}` : f;
     });
     parts.push(`Fontes: ${linhas.join('; ')}`);
@@ -65,6 +73,17 @@ export function composeRagReply(input: {
     parts.push(`Orientação geral (de apoio, confira na fonte): ${orientacao}`);
   }
 
+  // Aviso de revogação: relevante mesmo quando há afirmação vigente ao lado.
+  if (pertinentesRevogados.length > 0) {
+    const lst = pertinentesRevogados
+      .slice(0, 3)
+      .map((t) => (t.fonteUrl ? `${t.citacao} (${t.fonteUrl})` : t.citacao));
+    parts.push(
+      `⚠️ Atenção: há dispositivo(s) relacionados, porém REVOGADOS — não servem como ` +
+        `base vigente: ${lst.join('; ')}. Confira a norma atual na fonte oficial.`,
+    );
+  }
+
   if (validas.length === 0) {
     // Tipo C (ou A sem fonte): transparente e útil, sem citação fabricada.
     parts.push(
@@ -72,9 +91,10 @@ export function composeRagReply(input: {
         'afirmar nada sem fonte.',
     );
     if (aproximados.length > 0) {
-      const ptr = aproximados
-        .slice(0, 3)
-        .map((t) => (t.fonteUrl ? `${t.citacao} (${t.fonteUrl})` : t.citacao));
+      const ptr = aproximados.slice(0, 3).map((t) => {
+        const marca = revogado(t) ? ' [REVOGADA]' : '';
+        return t.fonteUrl ? `${t.citacao}${marca} (${t.fonteUrl})` : `${t.citacao}${marca}`;
+      });
       parts.push(`Dispositivos próximos no acervo (confira se ajudam): ${ptr.join('; ')}`);
     }
     parts.push('Você pode reformular a pergunta ou conferir direto na fonte oficial.');

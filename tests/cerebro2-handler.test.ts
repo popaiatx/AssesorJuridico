@@ -37,6 +37,7 @@ const trecho: CorpusTrecho = {
   texto: 'São direitos básicos do consumidor...',
   fonteUrl: 'http://planalto/cdc',
   similarity: 0.8,
+  vigenciaStatus: 'vigente',
 };
 
 const ctx: MessageContext = {

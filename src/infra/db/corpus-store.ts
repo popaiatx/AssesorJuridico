@@ -23,12 +23,21 @@ function vectorLiteral(embedding: number[]): string {
 export async function searchCorpus(embedding: number[], k: number): Promise<CorpusTrecho[]> {
   const vec = vectorLiteral(embedding);
   const rows = await pool<
-    { citacao: string; texto: string; fonte_url: string | null; similarity: number }[]
+    {
+      citacao: string;
+      texto: string;
+      fonte_url: string | null;
+      similarity: number;
+      vigencia_status: string | null;
+    }[]
   >`
-    select citacao, texto, fonte_url, 1 - (embedding <=> ${vec}::vector) as similarity
-    from corpus_trechos
-    where embedding is not null
-    order by embedding <=> ${vec}::vector
+    select t.citacao, t.texto, t.fonte_url,
+           1 - (t.embedding <=> ${vec}::vector) as similarity,
+           n.vigencia_status
+    from corpus_trechos t
+    join corpus_normas n on n.id = t.norma_id
+    where t.embedding is not null
+    order by t.embedding <=> ${vec}::vector
     limit ${k}
   `;
   return rows.map((r) => ({
@@ -36,6 +45,7 @@ export async function searchCorpus(embedding: number[], k: number): Promise<Corp
     texto: r.texto,
     fonteUrl: r.fonte_url,
     similarity: Number(r.similarity),
+    vigenciaStatus: r.vigencia_status,
   }));
 }
 

@@ -32,7 +32,7 @@ export interface Cerebro2HandlerDeps {
 }
 
 function toRag(t: CorpusTrecho): RagTrecho {
-  return { citacao: t.citacao, texto: t.texto, fonteUrl: t.fonteUrl };
+  return { citacao: t.citacao, texto: t.texto, fonteUrl: t.fonteUrl, vigenciaStatus: t.vigenciaStatus };
 }
 
 export class Cerebro2Handler implements IntentHandler {

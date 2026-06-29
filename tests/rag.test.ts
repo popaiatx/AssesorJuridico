@@ -82,6 +82,30 @@ describe('composeRagReply — antialucinação e os 3 tipos', () => {
     expect(r.reply).toContain('art. 5º da CF');
   });
 
+  it('revogada NUNCA vira afirmação validada — só aviso de revogação', () => {
+    const trechoRevogado: RagTrecho = {
+      citacao: 'art. 1º do CC/1916',
+      texto: 'Toda pessoa é capaz...',
+      fonteUrl: 'http://planalto/cc1916',
+      vigenciaStatus: 'revogada',
+    };
+    const r = composeRagReply({
+      pertinentes: [trechoRevogado], // recuperado e pertinente, porém revogado
+      aproximados: [],
+      llm: {
+        orientacao: '',
+        // o LLM tenta afirmar citando a norma revogada:
+        afirmacoes: [{ texto: 'Toda pessoa é capaz de direitos.', fonte: 'art. 1º do CC/1916' }],
+        recusou: false,
+      },
+    });
+    expect(r.fontesValidas).toEqual([]); // revogada fora do allowlist
+    expect(r.reply).not.toContain('Com base no acervo'); // não afirma
+    expect(r.reply).toContain('REVOGADOS'); // aviso de revogação
+    expect(r.reply).toContain('art. 1º do CC/1916');
+    expect(r.reply.toLowerCase()).toContain('não vou afirmar');
+  });
+
   it('mistura: afirmação válida fica, inválida some', () => {
     const r = composeRagReply({
       pertinentes: [trechoCDC],

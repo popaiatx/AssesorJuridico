@@ -11,6 +11,8 @@ export interface CorpusTrecho {
   fonteUrl: string | null;
   /** Similaridade cosseno (1 = idêntico). */
   similarity: number;
+  /** Vigência da norma-mãe ('vigente' | 'revogada' | null). Revogada nunca afirma. */
+  vigenciaStatus: string | null;
 }
 
 export interface CorpusStore {
