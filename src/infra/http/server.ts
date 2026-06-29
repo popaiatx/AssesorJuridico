@@ -36,6 +36,11 @@ import type { HandlerRegistry, IntentHandler } from '../../core/orchestration/ha
 import type { Intent } from '../../core/domain/intents.js';
 import { getLlmConfig } from '../../adapters/llm/config.js';
 import { createLlmAdapter } from '../../adapters/llm/factory.js';
+import { Cerebro1Handler } from '../../application/cerebro1/cerebro1-handler.js';
+import {
+  supabaseCerebro1Store,
+  supabasePendingStore,
+} from '../../adapters/cerebro1/supabase-cerebro1-store.js';
 import { getWhatsappConfig } from '../../adapters/whatsapp/config.js';
 import { CloudApiClient } from '../../adapters/whatsapp/cloud-api-client.js';
 import { WhatsappAdapter } from '../../adapters/whatsapp/whatsapp-adapter.js';
@@ -88,7 +93,17 @@ function registerWhatsapp(app: FastifyInstance): void {
     classifier = new LlmIntentClassifier(llm, keyword);
     overrides.ajuda = new LlmGeneralHandler('ajuda', llm);
     overrides.outro = new LlmGeneralHandler('outro', llm);
-    app.log.info(`LLM habilitado (${llmCfg.provider}/${llmCfg.model})`);
+    // Cérebro 1 (dados do escritório) atende consulta_dados e agendar.
+    const cerebro1 = new Cerebro1Handler({
+      llm,
+      store: supabaseCerebro1Store,
+      pending: supabasePendingStore,
+      clock: () => new Date(),
+      logger: app.log,
+    });
+    overrides.consulta_dados = cerebro1;
+    overrides.agendar = cerebro1;
+    app.log.info(`LLM habilitado (${llmCfg.provider}/${llmCfg.model}) — Cérebro 1 ativo`);
   } else {
     app.log.warn('LLM não configurado — usando classificador por palavras-chave');
   }

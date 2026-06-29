@@ -43,7 +43,7 @@ function normalizeCnj(raw: string): string | null {
   return digits.length === 20 ? digits : null;
 }
 
-function formatData(iso: string): string {
+export function formatData(iso: string): string {
   return new Date(iso).toLocaleString('pt-BR', {
     dateStyle: 'long',
     timeStyle: 'short',
@@ -51,7 +51,7 @@ function formatData(iso: string): string {
   });
 }
 
-function labelTipo(tipo: string): string {
+export function labelTipo(tipo: string): string {
   return tipo === 'audiencia' ? 'audiência' : tipo === 'reuniao' ? 'reunião' : 'prazo';
 }
 
