@@ -36,6 +36,7 @@ const envSchema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_VERIFY_TOKEN: z.string().optional(),
   WHATSAPP_APP_SECRET: z.string().optional(),
+  ASAAS_ENV: z.enum(['sandbox', 'production']).optional(),
   ASAAS_API_KEY: z.string().optional(),
   ASAAS_WEBHOOK_SECRET: z.string().optional(),
   COURTS_API_KEY: z.string().optional(),

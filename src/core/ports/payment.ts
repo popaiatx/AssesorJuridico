@@ -1,37 +1,46 @@
 /**
- * Port de PAGAMENTO (driven). O domínio não conhece o gateway (default Asaas):
- * fala só por esta interface. Webhooks devem ser idempotentes — o
- * `gatewayEventId` é a chave para processar cada evento uma única vez.
- *
- * Apenas assinaturas; sem implementação nesta fase (ver adapters/payment).
+ * Port de PAGAMENTO (driven). O domínio não conhece o gateway (Asaas): fala só
+ * por esta interface. Webhooks são idempotentes — `gatewayEventId` é a chave
+ * para processar cada evento uma única vez. Nunca confiar no payload: confirmar
+ * o status no gateway antes de ativar.
  */
-import type { PagamentoMetodo } from '../domain/entities.js';
+
+export interface EnsureCustomerInput {
+  assinanteId: string;
+  nome: string;
+  email: string | null;
+}
 
 export interface CreateSubscriptionInput {
   assinanteId: string;
-  metodo: PagamentoMetodo;
-  plano: string;
+  customerId: string;
 }
 
-export interface SubscriptionRef {
-  gatewayRef: string;
-  status: string;
+export interface SubscriptionResult {
+  /** Referência da assinatura no gateway. */
+  subscriptionRef: string;
+  /** Link de pagamento (checkout) a enviar ao usuário. */
+  paymentUrl: string;
+  /** Próximo vencimento (YYYY-MM-DD), se conhecido. */
   proximoVencimento: string | null;
 }
 
 /** Evento já normalizado a partir do webhook do gateway. */
 export interface PaymentWebhookEvent {
   gatewayEventId: string; // idempotência
-  tipo: string;
-  assinanteRef: string | null;
-  payload: unknown;
+  tipo: string; // ex.: PAYMENT_CONFIRMED, PAYMENT_OVERDUE, ...
+  assinanteRef: string | null; // externalReference = assinante_id
+  chargeId: string | null; // id da cobrança (para confirmar status no gateway)
 }
 
 export interface PaymentPort {
-  createSubscription(input: CreateSubscriptionInput): Promise<SubscriptionRef>;
-  getSubscription(gatewayRef: string): Promise<SubscriptionRef>;
-  cancelSubscription(gatewayRef: string): Promise<void>;
-  /** Valida a autenticidade do webhook (assinatura/HMAC) antes de confiar nele. */
+  /** Garante o cliente no gateway e retorna o customerId. */
+  ensureCustomer(input: EnsureCustomerInput): Promise<string>;
+  /** Cria a assinatura recorrente (Pix/cartão) e retorna o link de pagamento. */
+  createSubscription(input: CreateSubscriptionInput): Promise<SubscriptionResult>;
+  /** Confirma o status de uma cobrança no gateway (fonte da verdade). */
+  getPaymentStatus(chargeId: string): Promise<string>;
+  /** Valida a autenticidade do webhook (header `asaas-access-token`). */
   verifyWebhook(rawBody: Buffer, headers: Record<string, string>): Promise<boolean>;
   parseWebhookEvent(rawBody: Buffer): PaymentWebhookEvent;
 }
