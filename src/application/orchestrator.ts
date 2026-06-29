@@ -14,7 +14,11 @@
  */
 import type { Intent } from '../core/domain/intents.js';
 import { INTENT_LABEL } from '../core/domain/intents.js';
-import type { HandlerResult, HandlerRegistry, MessageContext } from '../core/orchestration/handler.js';
+import type {
+  HandlerResult,
+  HandlerRegistry,
+  MessageContext,
+} from '../core/orchestration/handler.js';
 import type { IntentClassifier } from '../core/ports/intent-classifier.js';
 import type { InteractionLogPort } from '../core/ports/interaction-log.js';
 import type { SubscriptionGate } from '../core/ports/subscription-gate.js';
@@ -56,9 +60,9 @@ export class Orchestrator {
 
     // Pré-tenant: telefone desconhecido → onboarding, sem classificar.
     if (assinanteId === null) {
-      const replyText = await this.runHandler('onboarding', { assinanteId, intent: 'onboarding', message });
-      await this.record(assinanteId, 'onboarding');
-      return { assinanteId, intent: 'onboarding', ambiguous: false, replyText };
+      const result = await this.runHandler('onboarding', { assinanteId, intent: 'onboarding', message });
+      await this.record(assinanteId, 'onboarding', result);
+      return { assinanteId, intent: 'onboarding', ambiguous: false, replyText: result.replyText };
     }
 
     // PORTEIRO (fail-closed): sem confirmação positiva de acesso, desvia TUDO
@@ -67,13 +71,13 @@ export class Orchestrator {
     if (this.deps.gate && this.deps.paymentRequiredHandler) {
       const decision = await this.deps.gate.evaluate(assinanteId, this.now());
       if (!decision.allowed) {
-        const { replyText } = await this.deps.paymentRequiredHandler.handle({
+        const result = await this.deps.paymentRequiredHandler.handle({
           assinanteId,
           intent: 'assinatura',
           message,
         });
-        await this.record(assinanteId, 'assinatura');
-        return { assinanteId, intent: 'assinatura', ambiguous: false, replyText };
+        await this.record(assinanteId, 'assinatura', result);
+        return { assinanteId, intent: 'assinatura', ambiguous: false, replyText: result.replyText };
       }
     }
 
@@ -87,9 +91,9 @@ export class Orchestrator {
     }
 
     const intent = result.intent;
-    const replyText = await this.runHandler(intent, { assinanteId, intent, message });
-    await this.record(assinanteId, intent);
-    return { assinanteId, intent, ambiguous: false, replyText };
+    const handled = await this.runHandler(intent, { assinanteId, intent, message });
+    await this.record(assinanteId, intent, handled);
+    return { assinanteId, intent, ambiguous: false, replyText: handled.replyText };
   }
 
   private now(): Date {
@@ -97,14 +101,13 @@ export class Orchestrator {
   }
 
   /** Roteia para EXATAMENTE um handler. Fallback seguro para 'outro'. */
-  private async runHandler(intent: Intent, ctx: MessageContext): Promise<string> {
+  private async runHandler(intent: Intent, ctx: MessageContext): Promise<HandlerResult> {
     const handler = this.deps.registry.get(intent) ?? this.deps.registry.get('outro');
     if (!handler) {
       // Registro incompleto é bug de programação (completude é testada).
       throw new Error(`Sem handler para a intenção "${intent}" e sem fallback "outro".`);
     }
-    const { replyText } = await handler.handle(ctx);
-    return replyText;
+    return handler.handle(ctx);
   }
 
   /** Mensagem de desambiguação em linguagem natural (R-A): nunca nomes internos. */
@@ -120,16 +123,20 @@ export class Orchestrator {
   }
 
   /**
-   * Registra a interação. cerebro=null neste passo (placeholders não acionam
-   * cérebro); entrada/saida ficam fora até existir anonimização.
+   * Registra a interação. O cérebro e as fontes citadas vêm do handler (ex.: RAG);
+   * entrada/saida ficam fora até existir anonimização do conteúdo.
    */
-  private record(assinanteId: string | null, intent: Intent): Promise<void> {
+  private record(
+    assinanteId: string | null,
+    intent: Intent,
+    result?: HandlerResult,
+  ): Promise<void> {
     return this.deps.interactionLog.record({
       assinanteId,
       intent,
-      cerebro: null,
+      cerebro: result?.cerebro ?? null,
       anonimizado: false,
-      fontesCitadas: [],
+      fontesCitadas: result?.fontesCitadas ?? [],
     });
   }
 }

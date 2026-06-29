@@ -2,7 +2,7 @@
  * Contrato de um handler de intenção. O registro mapeia cada `Intent` para
  * EXATAMENTE um handler; o orquestrador chama um só (um-cérebro-por-mensagem).
  */
-import type { Intent } from '../domain/intents.js';
+import type { Cerebro, Intent } from '../domain/intents.js';
 import type { InboundMessage } from '../ports/whatsapp.js';
 
 export interface MessageContext {
@@ -15,6 +15,10 @@ export interface MessageContext {
 export interface HandlerResult {
   /** Texto a enviar ao usuário (o envio em si é responsabilidade do canal). */
   replyText: string;
+  /** Cérebro que efetivamente respondeu (para auditoria). */
+  cerebro?: Cerebro;
+  /** Fontes citadas (RAG) — gravadas no log de interação. */
+  fontesCitadas?: string[];
 }
 
 export interface IntentHandler {

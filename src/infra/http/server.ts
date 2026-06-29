@@ -41,6 +41,10 @@ import {
   supabaseCerebro1Store,
   supabasePendingStore,
 } from '../../adapters/cerebro1/supabase-cerebro1-store.js';
+import { Cerebro2Handler } from '../../application/cerebro2/cerebro2-handler.js';
+import { supabaseCorpusStore } from '../../adapters/corpus/supabase-corpus-store.js';
+import { getEmbeddingsConfig } from '../../adapters/embeddings/config.js';
+import { createEmbeddingsAdapter } from '../../adapters/embeddings/factory.js';
 import { getWhatsappConfig } from '../../adapters/whatsapp/config.js';
 import { CloudApiClient } from '../../adapters/whatsapp/cloud-api-client.js';
 import { WhatsappAdapter } from '../../adapters/whatsapp/whatsapp-adapter.js';
@@ -104,6 +108,21 @@ function registerWhatsapp(app: FastifyInstance): void {
     overrides.consulta_dados = cerebro1;
     overrides.agendar = cerebro1;
     app.log.info(`LLM habilitado (${llmCfg.provider}/${llmCfg.model}) — Cérebro 1 ativo`);
+
+    // Cérebro 2 (RAG jurídico) atende duvida_juridica — só com embeddings configurados.
+    const embCfg = getEmbeddingsConfig();
+    if (embCfg) {
+      overrides.duvida_juridica = new Cerebro2Handler({
+        llm,
+        embeddings: createEmbeddingsAdapter(embCfg),
+        corpus: supabaseCorpusStore,
+        minSimilarity: config.RAG_MIN_SIMILARITY,
+        logger: app.log,
+      });
+      app.log.info(`Embeddings habilitados (${embCfg.provider}/${embCfg.model}) — Cérebro 2 ativo`);
+    } else {
+      app.log.warn('Embeddings não configurados — Cérebro 2 (RAG) inativo (placeholder)');
+    }
   } else {
     app.log.warn('LLM não configurado — usando classificador por palavras-chave');
   }
