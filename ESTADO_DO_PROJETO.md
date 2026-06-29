@@ -6,11 +6,11 @@
 
 ## Fase atual
 
-- **Fase 1 (Núcleo).** Concluído o **Passo 6A — Onboarding enxuto + trial 3 dias +
-  porteiro (fail-closed)**. Onboarding já validado em produção. Falta **validar em
-  produção o bloqueio pós-trial** (guia no README: `trial:expire`). Próximo:
-  **Passo 6B — Asaas (sandbox): cobrança real, webhook idempotente, máquina de
-  estados da assinatura**.
+- **Fase 1 (Núcleo).** Concluído o **Passo 6B — Asaas (sandbox): cobrança, webhook
+  idempotente, máquina de estados**. Falta a **validação manual no sandbox**
+  (criar conta/chaves, configurar o webhook por último, simular pagar→desbloquear)
+  — guia no README. Núcleo da Fase 1 essencialmente completo; próximo: **cérebros**
+  (C1 NL→SQL ou C2 RAG) — onde mora o valor jurídico.
 
 ## O que já está pronto
 
@@ -54,7 +54,17 @@
   rotear: só libera com `ativa` ou trial no prazo; qualquer outra coisa (vencido,
   sem dado, erro de leitura) **bloqueia e desvia para pagamento** (placeholder
   honesto em 6A). `trial:expire` para testar o bloqueio. Migração 0015 validada em
-  Postgres 15. **114 testes verdes.**
+  Postgres 15.
+- **Passo 6B — Asaas (sandbox).** `PaymentPort` + `AsaasAdapter` (raw HTTP
+  injetável; base v3 oficial por `ASAAS_ENV`; header `access_token`). Handler de
+  cobrança **idempotente** (reusa `cobranca_url` ou cria assinatura e envia link;
+  `externalReference = assinante_id`). **Webhook `/webhooks/asaas`**:
+  autenticado (`asaas-access-token` timing-safe), **idempotente** por id do evento
+  (`app.apply_asaas_event`, SECURITY DEFINER), **processa-antes-do-ack**, confirma
+  no Asaas antes de ativar; mapa CONFIRMED/RECEIVED→ativa, OVERDUE→inadimplente,
+  REFUNDED/DELETED→aguardando_pagamento, desconhecido→ignora. Máquina de estados
+  da assinatura; ao ativar, o porteiro do 6A libera. Migração 0016 validada em
+  Postgres 15. **131 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -93,15 +103,20 @@
   `assinaturas` (`status` + `trial_fim`); `assinantes.status` não é usado para gate.
 - **Porteiro fail-closed:** bloqueia por padrão; só libera com confirmação positiva
   (ativa ou trial no prazo). Erro de leitura/estado inesperado → bloqueia.
+- **Pagamento (Asaas):** gateway é a fonte da verdade (confirma antes de ativar);
+  webhook **autenticado + idempotente**, processa-antes-do-ack; cobrança
+  idempotente (não duplica link); nunca armazena cartão.
 
 ## PENDENTE (explícito)
 
-- **Pagamento (Passo 6B):** cobrança real Asaas (sandbox) — adapter, link,
-  webhook idempotente, máquina de estados; hoje o bloqueio é placeholder honesto.
-- Adapters reais ainda stubs: `payment`, `courts`, `storage`.
-  (`whatsapp` e `llm` já são reais.)
-- **Validar em produção o bloqueio pós-trial** (`trial:expire` → mensagem
-  bloqueada) — guia no README.
+- **Pagamento — validação manual (sandbox):** criar conta/chaves Asaas,
+  configurar o webhook (por último), simular pagar→desbloquear. Aprovação dos
+  **templates de cobrança na Meta** (avisos fora da janela 24h). Pix Automático
+  fino = refinamento futuro.
+- Adapters reais ainda stubs: `courts`, `storage`.
+  (`whatsapp`, `llm` e `payment`/Asaas já são reais.)
+- **Validar em produção** o bloqueio pós-trial e o ciclo de pagamento
+  (`trial:expire` → link → pagar no sandbox → desbloqueio) — guia no README.
 - **Onboarding — verificação real da inscrição na OAB** contra fonte externa
   (removida do fluxo obrigatório; pode virar opção futura).
 - **WhatsApp:** **download de mídia + Storage** (mídia hoje só placeholder);
@@ -115,14 +130,16 @@
 - Provisionamento Supabase (projeto, pooler, role sem BYPASSRLS, backups/PITR).
 - **Pruning** das linhas antigas de `whatsapp_mensagens_processadas` e
   `onboarding_estado` abandonados (operação).
+- **Dunning/lembretes** de cobrança (pré-vencimento, suspensão) e conciliação
+  periódica com o Asaas — fase de operação do pagamento.
 
 ## Próximos passos previstos
 
-1. **Passo 6B — Asaas (sandbox):** cobrança real, link de pagamento, webhook
-   idempotente, máquina de estados da assinatura, notificações por template.
-2. Validar em produção: bloqueio pós-trial (6A) e, depois, pagar→desbloquear (6B).
-3. Cérebros: C1 (NL→SQL — dados do escritório) ou C2 (RAG jurídico).
-4. Mídia→Storage; fila durável do webhook; verificação real da OAB (opcional).
+1. **Validar em produção (sandbox):** bloqueio pós-trial → link → pagar →
+   desbloqueio (guia no README) + aprovar templates de cobrança na Meta.
+2. **Cérebros (o valor jurídico):** C1 (NL→SQL — dados do escritório) ou C2
+   (RAG jurídico com citação obrigatória).
+3. Dunning/lembretes de cobrança; mídia→Storage; fila durável do webhook.
 
 ## Como rodar
 

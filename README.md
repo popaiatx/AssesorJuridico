@@ -138,8 +138,32 @@ de rotear (lê `status` + `trial_fim` da `assinaturas` via `withTenant`):
   trial vencido, `trial_fim` nulo, sem assinatura, status inesperado, **ou erro ao
   ler** (mesmo princípio do RLS fail-closed). Onboarding e o próprio pagamento
   seguem acessíveis.
-- No **Passo 6A**, o handler de pagamento é **placeholder honesto** (avisa que o
-  teste terminou; **sem link/cobrança falsa**). A cobrança real (Asaas) vem no **6B**.
+- Bloqueado → o handler de pagamento gera/reenvia o **link real do Asaas**
+  (idempotente; ver abaixo). Sem Asaas configurado, cai num placeholder honesto.
+
+## Pagamento (Asaas, sandbox) — cobrança e desbloqueio
+
+Quando o trial vence, o porteiro desvia para o `AsaasPaymentHandler`:
+- **Idempotente:** se já há cobrança aberta (`cobranca_url`), reenvia o **mesmo**
+  link; senão cria a assinatura no Asaas (Pix/cartão; `externalReference =
+  assinante_id`), salva o link e transita `trial → aguardando_pagamento`.
+- **Webhook `/webhooks/asaas`** (processa-antes-do-ack, como o do WhatsApp):
+  autenticado pelo header **`asaas-access-token`** (timing-safe vs
+  `ASAAS_WEBHOOK_SECRET`), **idempotente** por id do evento (`pagamento_eventos`,
+  via `SECURITY DEFINER`), **confirma o status no Asaas antes de ativar** (nunca
+  confia no payload). Mapeamento: `PAYMENT_CONFIRMED`/`PAYMENT_RECEIVED → ativa`
+  (**desbloqueia**); `PAYMENT_OVERDUE → inadimplente`; `PAYMENT_REFUNDED`/
+  `PAYMENT_DELETED → aguardando_pagamento`; evento desconhecido → ignora com
+  segurança (**nunca ativa**).
+- **Máquina de estados:** `trial → aguardando_pagamento → ativa → inadimplente →
+  suspensa → cancelada`; pagamento confirmado reativa → `ativa` e o porteiro
+  volta a liberar.
+- **Segurança:** nunca armazena dado de cartão (tokenização/checkout do Asaas);
+  segredos só em variáveis de ambiente; `service_role` fora do caminho da mensagem.
+- **PENDENTE (validação manual):** conta/checagem real no Asaas e **aprovação dos
+  templates de cobrança na Meta** (avisos fora da janela de 24h). Pix Automático
+  fino (autorização recorrente no banco) é refinamento futuro; hoje o checkout
+  oferece Pix e cartão.
 
 ## Deploy e ativação (modo desenvolvimento real)
 
@@ -202,12 +226,35 @@ produção. `/health` e o webhook funcionam atrás do HTTPS/proxy de uma platafo
    valer. Dúvidas gerais/ajuda vêm do LLM; ações seguem placeholders honestos.
 
 **6) Testar o trial de 3 dias e o BLOQUEIO** (sem esperar 3 dias):
-   - Aplique a migração no Supabase: `supabase db push` (inclui a `0015`).
+   - Aplique as migrações no Supabase: `supabase db push` (inclui `0015` e `0016`).
    - Faça o onboarding (passo 4) → conta em trial → converse normalmente.
    - **Force o fim do trial:** `npm run trial:expire -- 5511999990001` — coloca
      `trial_fim` no passado. A **próxima mensagem** é bloqueada e desviada para o
-     fluxo de pagamento (placeholder honesto no 6A; cobrança real virá no 6B).
+     fluxo de pagamento (link do Asaas se configurado; senão placeholder honesto).
    - Para voltar a testar do zero: `npm run reset:assinante -- <telefone>`.
+
+### Configurar o Asaas (sandbox) — fazer por ÚLTIMO, após o deploy
+
+A rota `/webhooks/asaas` só existe depois deste passo no ar. Ordem:
+
+1. **Conta sandbox:** crie em `https://sandbox.asaas.com`. Em *Configurações ›
+   Integrações › Chave de API*, copie a chave (sandbox começa com `$aact_hmlg_`).
+2. **Variáveis no Railway:** `ASAAS_ENV=sandbox`, `ASAAS_API_KEY=<a chave>`,
+   `ASAAS_WEBHOOK_SECRET=<um token que você inventa>`. Faça o redeploy → o log
+   mostra "Asaas habilitado (sandbox)".
+3. **Webhook no Asaas** (*Configurações › Notificações/Webhooks › Adicionar*):
+   - **Nome:** livre (ex.: "Assessor Juridico - Pagamentos").
+   - **URL:** `https://SEU-DOMINIO/webhooks/asaas`.
+   - **Versão da API:** `v3` (não muda depois).
+   - **Token de autenticação:** **exatamente** o mesmo valor de
+     `ASAAS_WEBHOOK_SECRET` (vira o header `asaas-access-token`).
+   - **Tipo de envio:** Sequencial. **Fila de sincronização:** ativada.
+   - **Eventos:** marque só `PAYMENT_CONFIRMED`, `PAYMENT_RECEIVED`,
+     `PAYMENT_OVERDUE`, `PAYMENT_REFUNDED` (e os `SUBSCRIPTION_*` se quiser sincronia).
+4. **Simulação ponta a ponta (sandbox):** número novo → onboarding → trial →
+   `npm run trial:expire -- <tel>` → mande uma mensagem → **recebe o link** →
+   pague no checkout sandbox → o Asaas dispara `PAYMENT_CONFIRMED` →
+   `/webhooks/asaas` confirma e ativa → mande outra mensagem → **acesso liberado**.
 
 ### Caminho rápido (iteração local)
 
@@ -284,7 +331,7 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0015)
+## Tabelas (migrações 0001–0016)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`
@@ -294,19 +341,21 @@ tenant e índices nas FKs e colunas de filtro. A `0013` adiciona as tabelas
 travadas do webhook (`whatsapp_mensagens_processadas`, `whatsapp_contatos_janela`)
 e a `0014` as do onboarding (`onboarding_estado`, `onboarding_eventos`) —
 manipuladas só por funções `SECURITY DEFINER`. A `0015` torna OAB/documento
-opcionais e cria a assinatura `trial` (com `trial_fim`) no cadastro.
+opcionais e cria a assinatura `trial` (com `trial_fim`) no cadastro. A `0016`
+adiciona a cobrança (`cobranca_url`, `gateway_customer_id`) e a aplicação
+idempotente de eventos do Asaas (`app.apply_asaas_event`).
 
 ## PENDENTE (fora do escopo atual)
 
 Nada de mock que finja funcionar — o que não foi implementado está explícito:
 
-- **Pagamento (Passo 6B):** o porteiro já bloqueia após o trial, mas a **cobrança
-  real é PENDENTE** — adapter Asaas (sandbox), link de pagamento, webhook
-  idempotente e máquina de estados da assinatura. Hoje o bloqueio responde um
-  **placeholder honesto** (sem cobrança).
-- **Adapters externos** (`src/adapters/{payment,courts,storage}`): **stubs que
-  lançam `NotImplementedError`**. Implementação real em fases próprias. (Os
-  adapters de `classifier`, `interaction-log`, `whatsapp` e **`llm`** já são reais.)
+- **Pagamento — validação manual (sandbox):** o adapter Asaas, o link, o webhook
+  idempotente e a máquina de estados estão **implementados**; falta a **validação
+  real no sandbox** (conta/chaves/webhook) e a **aprovação dos templates de
+  cobrança na Meta**. Pix Automático fino é refinamento futuro.
+- **Adapters externos** (`src/adapters/{courts,storage}`): **stubs que lançam
+  `NotImplementedError`**. (Os adapters de `classifier`, `interaction-log`,
+  `whatsapp`, `llm` e **`payment` (Asaas)** já são reais.)
 - **LLM — embeddings e validação real:** `generate` é real (Anthropic/OpenAI);
   `embed` é **PENDENTE** (fase RAG). Tool use existe no port mas **nenhuma
   ferramenta de escrita está ligada**. O ciclo real com chave/URL pública é
