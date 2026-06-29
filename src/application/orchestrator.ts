@@ -14,13 +14,19 @@
  */
 import type { Intent } from '../core/domain/intents.js';
 import { INTENT_LABEL } from '../core/domain/intents.js';
-import type { HandlerRegistry, MessageContext } from '../core/orchestration/handler.js';
+import type { HandlerResult, HandlerRegistry, MessageContext } from '../core/orchestration/handler.js';
 import type { IntentClassifier } from '../core/ports/intent-classifier.js';
 import type { InteractionLogPort } from '../core/ports/interaction-log.js';
+import type { SubscriptionGate } from '../core/ports/subscription-gate.js';
 import type { InboundMessage } from '../core/ports/whatsapp.js';
 
 /** Resolve a identidade do assinante a partir do telefone (pré-tenant, R4). */
 export type ResolveAssinante = (phone: string) => Promise<string | null>;
+
+/** Handler para onde o porteiro desvia quando o acesso está bloqueado. */
+export interface BlockedHandler {
+  handle(ctx: MessageContext): Promise<HandlerResult>;
+}
 
 export interface OrchestratorResult {
   assinanteId: string | null;
@@ -34,6 +40,12 @@ export interface OrchestratorDeps {
   classifier: IntentClassifier;
   registry: HandlerRegistry;
   interactionLog: InteractionLogPort;
+  /** Porteiro de acesso (opcional). Sem ele, não há bloqueio. */
+  gate?: SubscriptionGate;
+  /** Handler de pagamento, acionado quando o porteiro bloqueia. */
+  paymentRequiredHandler?: BlockedHandler;
+  /** Relógio injetável (default: agora). */
+  clock?: () => Date;
 }
 
 export class Orchestrator {
@@ -49,6 +61,22 @@ export class Orchestrator {
       return { assinanteId, intent: 'onboarding', ambiguous: false, replyText };
     }
 
+    // PORTEIRO (fail-closed): sem confirmação positiva de acesso, desvia TUDO
+    // para o fluxo de pagamento — independentemente do que a pessoa pediu.
+    // (Onboarding acima e o próprio pagamento continuam acessíveis.)
+    if (this.deps.gate && this.deps.paymentRequiredHandler) {
+      const decision = await this.deps.gate.evaluate(assinanteId, this.now());
+      if (!decision.allowed) {
+        const { replyText } = await this.deps.paymentRequiredHandler.handle({
+          assinanteId,
+          intent: 'assinatura',
+          message,
+        });
+        await this.record(assinanteId, 'assinatura');
+        return { assinanteId, intent: 'assinatura', ambiguous: false, replyText };
+      }
+    }
+
     const result = await this.deps.classifier.classify(message.text);
 
     // Ambíguo: pergunta em vez de adivinhar. Nenhum handler de negócio acionado.
@@ -62,6 +90,10 @@ export class Orchestrator {
     const replyText = await this.runHandler(intent, { assinanteId, intent, message });
     await this.record(assinanteId, intent);
     return { assinanteId, intent, ambiguous: false, replyText };
+  }
+
+  private now(): Date {
+    return (this.deps.clock ?? (() => new Date()))();
   }
 
   /** Roteia para EXATAMENTE um handler. Fallback seguro para 'outro'. */

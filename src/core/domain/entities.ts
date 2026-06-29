@@ -22,6 +22,7 @@ export type LancamentoStatus = 'pendente' | 'pago' | 'cancelado';
 export type PagamentoMetodo = 'pix_automatico' | 'cartao';
 export type AssinaturaStatus =
   | 'trial'
+  | 'aguardando_pagamento'
   | 'ativa'
   | 'inadimplente'
   | 'suspensa'

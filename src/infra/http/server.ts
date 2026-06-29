@@ -18,6 +18,8 @@ import { LlmIntentClassifier } from '../../adapters/classifier/llm-classifier.js
 import { SupabaseInteractionLog } from '../../adapters/interaction-log/supabase-interaction-log.js';
 import { SupabaseOnboardingStore } from '../../adapters/onboarding/supabase-onboarding-store.js';
 import { SupabasePreTenantAudit } from '../../adapters/pre-tenant-audit/supabase-pre-tenant-audit.js';
+import { SupabaseSubscriptionGate } from '../../adapters/subscription/supabase-subscription-gate.js';
+import { PaymentRequiredHandler } from '../../application/handlers/payment-required-handler.js';
 import type { IntentClassifier } from '../../core/ports/intent-classifier.js';
 import type { HandlerRegistry, IntentHandler } from '../../core/orchestration/handler.js';
 import type { Intent } from '../../core/domain/intents.js';
@@ -87,6 +89,9 @@ function registerWhatsapp(app: FastifyInstance): void {
     classifier,
     registry,
     interactionLog: new SupabaseInteractionLog(app.log),
+    // Porteiro: bloqueia tudo após o trial (fail-closed) e desvia para pagamento.
+    gate: new SupabaseSubscriptionGate(),
+    paymentRequiredHandler: new PaymentRequiredHandler(),
   });
 
   const wcfg = getWhatsappConfig();
