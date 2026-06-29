@@ -96,6 +96,43 @@ extrai parâmetros; o **código executa** por query parametrizada e tipada.
 A `acoes_pendentes` é por tenant: o "sim" só resolve a ação **daquele** assinante.
 Testado com dois assinantes (A nunca lê/lista/consulta nem confirma ação de B).
 
+## Cérebro 2 — RAG jurídico (recuperar → citar → validar → recusar)
+
+O diferencial de confiabilidade: a IA só afirma o que **recupera** de um corpus de
+legislação real, **com citação validada**; sem fonte, **recusa**. Atende
+`duvida_juridica` (só com **LLM + embeddings** configurados; senão, placeholder).
+
+- **Corpus COMPARTILHADO** (o oposto do Cérebro 1): `corpus_normas`/`corpus_trechos`
+  são referência pública, **sem RLS por tenant** (leitura pública). pgvector + HNSW;
+  embeddings OpenAI `text-embedding-3-small` (1536). O **log de interação** segue por
+  tenant (com `cerebro` e `fontes citadas`).
+- **Pipeline:** `embed(pergunta)` → busca vetorial → trechos **pertinentes** (acima
+  de `RAG_MIN_SIMILARITY`) → o LLM redige com **saída estruturada** → fronteira
+  determinística valida e compõe.
+- **Três tipos de pedido** (antialucinação inviolável para afirmações):
+  - **(A) afirmação jurídica** (prazo, artigo, base legal): só sai com `fonte`
+    validada contra o recuperado; citação fabricada pelo LLM é **descartada**.
+  - **(B) orientação geral** (o que é uma contestação, que provas importam): a IA
+    ajuda, **rotulado como apoio**, sem citar dispositivo concreto (isso seria
+    afirmação → exige fonte).
+  - **(C) sem fonte:** resposta **transparente e útil** — diz o que não pode afirmar,
+    oferece orientação geral e **dispositivos próximos que existem** no acervo, e como
+    conferir na fonte. Nunca "não encontrei" seco; nunca citação fabricada.
+- **Transparência:** a resposta sempre separa **citação real** (com fonte do corpus)
+  de **orientação geral**; nunca apresenta norma como vigente sem o status do corpus.
+
+### Ingestão do corpus (passo de OPS — você roda)
+`npm run ingest:corpus` (precisa de `EMBEDDINGS_*` + `DATABASE_URL`): baixa as leis
+do manifesto (`scripts/corpus-manifest.ts`: CF/88, CC, CPC, CLT, CDC, Lei 8.213/91),
+faz o **chunking por artigo**, embeda e grava o corpus. Idempotente por norma.
+Custo de embeddar o conjunto inicial: **poucos centavos** (uma vez).
+
+**Validar (produção):** após a ingestão, pelo WhatsApp — (A) pergunte um dispositivo
+real (ex.: direito de arrependimento do CDC) e confira a citação; (B) peça uma
+orientação geral e veja resposta útil sem dispositivo inventado; (C) pergunte algo
+fora do corpus e veja resposta transparente; e uma **armadilha** (lei que não
+existe) → deve **recusar**, nunca inventar.
+
 ## Webhook do WhatsApp (Cloud API)
 
 Entrada real do produto. Só é registrado se as `WHATSAPP_*` estiverem
@@ -360,7 +397,7 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0017)
+## Tabelas (migrações 0001–0018)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`
@@ -374,6 +411,8 @@ opcionais e cria a assinatura `trial` (com `trial_fim`) no cadastro. A `0016`
 adiciona a cobrança (`cobranca_url`, `gateway_customer_id`) e a aplicação
 idempotente de eventos do Asaas (`app.apply_asaas_event`). A `0017` adiciona
 `compromissos.descricao` e `acoes_pendentes` (confirmar-antes-de-gravar, por tenant).
+A `0018` cria o **corpus compartilhado** do RAG (`corpus_normas`/`corpus_trechos`,
+pgvector + HNSW), com leitura pública e sem tenant.
 
 ## PENDENTE (fora do escopo atual)
 
@@ -386,8 +425,10 @@ Nada de mock que finja funcionar — o que não foi implementado está explícit
 - **Adapters externos** (`src/adapters/{courts,storage}`): **stubs que lançam
   `NotImplementedError`**. (Os adapters de `classifier`, `interaction-log`,
   `whatsapp`, `llm` e **`payment` (Asaas)** já são reais.)
-- **LLM — embeddings:** `generate` e **tool use** são reais (o Cérebro 1 já usa
-  function calling); `embed` é **PENDENTE** (fase RAG, Cérebro 2).
+- **Cérebro 2 — validação manual + corpus:** o motor do RAG está pronto (8A); falta
+  **rodar a ingestão** (`npm run ingest:corpus` com `EMBEDDINGS_*`) e validar pelo
+  WhatsApp. **Jurisprudência** abrangente é o **8B** (agregador pago).
+- **Embeddings:** `EmbeddingsPort` (OpenAI) implementado; precisa de `EMBEDDINGS_*`.
 - **WhatsApp — validação manual e mídia:** o adapter é real, mas o handshake/
   entrega reais com a Meta e o template aprovado exigem **verificação manual**
   (passo a passo acima). **Download de mídia + Storage** ficam PENDENTE.
@@ -398,9 +439,8 @@ Nada de mock que finja funcionar — o que não foi implementado está explícit
 - **Anonimização:** implementada e usada nas leituras do Cérebro 1 (mascara nome
   de cliente/parte; campos estruturais e notas livres não). Captura de
   `entrada`/`saida` no `interacoes_log` segue fora.
-- **Cérebros 2 e 3**: **C1 (NL→SQL) está ligado** para `consulta_dados`/`agendar`;
-  faltam **C2 (RAG jurídico com citação)** e **C3 (tribunais)** — seguem
-  placeholders. `pgvector` (corpus do RAG) ainda não criado.
+- **Cérebro 3 (tribunais)** segue placeholder. **C1** (NL→SQL) e **C2** (RAG
+  jurídico — legislação) estão ligados; **jurisprudência** é o **8B** (agregador pago).
 - **Pagamento, lembretes proativos, painel admin** — fases seguintes.
 - **Storage**: buckets privados e políticas por tenant — fase de documentos.
 - **Provisionamento Supabase**: projeto, pooler, role sem `BYPASSRLS`,

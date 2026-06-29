@@ -6,12 +6,12 @@
 
 ## Fase atual
 
-- **Fase 2 (Inteligência).** Concluído o **Passo 7 — Cérebro 1 (dados do
-  escritório)**: o LLM age via ações tipadas (tool-use) sobre processos e
-  compromissos do próprio usuário, com confirmar-antes-de-gravar e isolamento por
-  tenant. Falta **validar em produção** (cadastrar/listar pelo WhatsApp). Pendente
-  ainda: validação do pagamento no sandbox (6B). Próximo: **Cérebro 2 (RAG
-  jurídico com citação)** ou **Cérebro 3 (tribunais)**.
+- **Fase 2 (Inteligência).** Concluído o **Passo 8A — Cérebro 2 (RAG jurídico,
+  legislação)**: corpus compartilhado (pgvector), embeddings OpenAI, pipeline
+  recuperar→citar→validar→recusar com os 3 tipos (A/B/C) e antialucinação. Falta
+  **rodar a ingestão** (`npm run ingest:corpus`) e **validar em produção**.
+  Próximo: **8B — agregador pago (jurisprudência)** ou **Cérebro 3 (tribunais)**.
+  Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B), RAG.
 
 ## O que já está pronto
 
@@ -72,7 +72,16 @@
   **Confirmar-antes-de-gravar** + slot-filling (`acoes_pendentes`); leitura
   **ler-depois-formatar** com **anonimização** (Cliente A/Parte A → reidentifica).
   **Isolamento em 3 camadas** testado com 2 assinantes. Migração 0017 validada em
-  Postgres 15. **147 testes verdes.**
+  Postgres 15.
+- **Passo 8A — Cérebro 2 (RAG jurídico, legislação).** Corpus **compartilhado**
+  (`corpus_normas`/`corpus_trechos`, pgvector + HNSW, leitura pública sem tenant);
+  **`EmbeddingsPort`** dedicado (OpenAI `text-embedding-3-small`/1536; `embed`
+  removido do `LlmPort`). `chunkLegislacao` por artigo; pipeline
+  **recuperar→gerar(só do recuperado)→validar-citação→recusar** com saída
+  estruturada (`orientacao` + `afirmacoes[{texto,fonte}]`) e os 3 tipos A/B/C.
+  `duvida_juridica`→C2 (só com LLM+embeddings). Log por tenant grava `cerebro` +
+  `fontes`. Ingestão `npm run ingest:corpus` (CF/CC/CPC/CLT/CDC/8.213). Migração
+  0018 validada em Postgres+pgvector. **162 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -119,6 +128,9 @@
   **Confirmar-antes-de-gravar**; **anonimização** ao mandar dados de leitura ao LLM.
 - **Isolamento (3 camadas):** identidade → tenant; schemas sem `assinante_id`;
   RLS backstop. `acoes_pendentes` por tenant ("sim" só resolve a ação daquele).
+- **Corpus do RAG é compartilhado, não-tenant** (oposto do Cérebro 1): leitura
+  pública. **Embeddings = provedor próprio** (Anthropic não tem). RAG só **afirma
+  com fonte validada**; A/B/C com antialucinação inviolável nas afirmações.
 
 ## PENDENTE (explícito)
 
@@ -127,17 +139,17 @@
   **templates de cobrança na Meta** (avisos fora da janela 24h). Pix Automático
   fino = refinamento futuro.
 - Adapters reais ainda stubs: `courts`, `storage`.
-  (`whatsapp`, `llm` e `payment`/Asaas já são reais.)
-- **Validar em produção** o bloqueio pós-trial e o ciclo de pagamento
-  (`trial:expire` → link → pagar no sandbox → desbloqueio) — guia no README.
+  (`whatsapp`, `llm`, `payment`/Asaas e `embeddings` já são reais.)
+- **Cérebro 2 — rodar a ingestão** (`npm run ingest:corpus` com `EMBEDDINGS_*`) e
+  **validar em produção** (dispositivo real, orientação, fora-do-corpus, armadilha).
+- **8B — agregador pago (jurisprudência)** + legislação ampliada (mesma ingestão).
+- **Validar em produção** (acumulado): Cérebro 1, pagamento sandbox (6B), RAG.
 - **Onboarding — verificação real da inscrição na OAB** contra fonte externa
   (removida do fluxo obrigatório; pode virar opção futura).
 - **WhatsApp:** **download de mídia + Storage** (mídia hoje só placeholder);
   template aprovado na Meta.
-- **LLM:** `embed` (fase RAG) — PENDENTE. (tool use já em uso no Cérebro 1.)
 - **Fila durável do webhook** (ack rápido + worker) — caminho de escala.
-- **Cérebro 2 (RAG jurídico com citação)** e **Cérebro 3 (tribunais)** — C1 já
-  ligado. `pgvector` (corpus do RAG) ainda não criado.
+- **Cérebro 3 (tribunais)** — agregador (próximo dos cérebros).
 - **Cérebro 1 — incrementos:** custos/honorários, edição/exclusão de registros,
   lembretes proativos (scheduler) a partir de `lembrete_em`.
 - Captura de `entrada`/`saida` no log (hoje `null`): só após estender a anonimização.
@@ -149,10 +161,10 @@
 
 ## Próximos passos previstos
 
-1. **Validar em produção:** Cérebro 1 (cadastrar/listar processo e compromisso,
-   ver confirmação e isolamento) e o pagamento no sandbox (6B).
-2. **Cérebro 2 — RAG jurídico** (citação obrigatória, recusa-sem-fonte; `pgvector`)
-   ou **Cérebro 3 — tribunais** (agregador).
+1. **Rodar a ingestão do corpus** e **validar o RAG em produção** (dispositivo
+   real cita certo; armadilha recusa); validar também C1 e pagamento sandbox.
+2. **8B — agregador pago (jurisprudência)** com a mesma ingestão, ou **Cérebro 3
+   (tribunais)**.
 3. Incrementos do Cérebro 1 (honorários/custos, edição, lembretes proativos);
    dunning de cobrança; mídia→Storage.
 

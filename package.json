@@ -18,6 +18,7 @@
     "seed:assinante": "tsx scripts/seed-assinante.ts",
     "reset:assinante": "tsx scripts/reset-assinante.ts",
     "trial:expire": "tsx scripts/expire-trial.ts",
+    "ingest:corpus": "tsx scripts/ingest-corpus.ts",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
     "db:migration": "supabase migration new",
