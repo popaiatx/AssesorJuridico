@@ -125,19 +125,21 @@ legislação real, **com citação validada**; sem fonte, **recusa**. Atende
 
 Carrega a legislação real no corpus do RAG. **Roteiro de ponta a ponta:**
 
-**1. Pré-requisito — migração `0018` aplicada** (cria `pgvector` + `corpus_normas`/
-`corpus_trechos`). Aplique as migrações no Supabase e confirme que as tabelas existem:
+**1. Pré-requisito — migrações `0018` + `0019` aplicadas** (`0018` cria `pgvector` +
+`corpus_normas`/`corpus_trechos`; `0019` adiciona os metadados de sync e
+`corpus_sync_runs`). Aplique e confirme que as tabelas/colunas existem:
 
 ```bash
-supabase db push        # aplica as migrações pendentes (entre elas a 0018)
+supabase db push        # aplica as migrações pendentes (entre elas 0018 e 0019)
 ```
 
 Confirmação rápida (SQL Editor do Supabase ou `psql`):
 
 ```sql
 select to_regclass('public.corpus_normas')  as normas,
-       to_regclass('public.corpus_trechos') as trechos;   -- ambas != null
-select extname from pg_extension where extname = 'vector'; -- 1 linha
+       to_regclass('public.corpus_trechos') as trechos,
+       to_regclass('public.corpus_sync_runs') as sync_runs;  -- todas != null
+select extname from pg_extension where extname = 'vector';    -- 1 linha
 ```
 
 **2. Variáveis no `.env`** (a ingestão lê do ambiente; nada vai para o git):
@@ -162,13 +164,13 @@ DATABASE_URL=postgresql://USER.PROJECT-ref:PASSWORD@aws-REGION.pooler.supabase.c
 npm run ingest:corpus
 ```
 
-**O que esperar na saída:** uma seção por norma do manifesto
-(`scripts/corpus-manifest.ts`: **6 normas** — CF/88, CC, CPC, CLT, CDC, Lei 8.213/91),
-com o progresso `N/M trechos` por lote (lotes de 64). Para cada norma: baixa o texto
-oficial do Planalto → **chunking por artigo** → embeda → grava. Ordem de grandeza:
-**alguns milhares de trechos** no total (um artigo ≈ um trecho); poucos minutos de
-execução; **poucos centavos** de custo de embeddings (uma vez). Termina em
-`Ingestão concluída.`.
+A ingestão é o **mesmo motor** da sincronização (`syncCorpus`), aqui com `--force`
+(reconstrói todas). Escopo curado = `src/adapters/source/legislacao/manifest.ts`
+(**6 normas** — CF/88, CC, CPC, CLT, CDC, Lei 8.213/91). Para cada norma: baixa o
+texto oficial do Planalto → **chunking por artigo** → embeda (lotes de 64) → grava.
+Ordem de grandeza: **alguns milhares de trechos** no total (um artigo ≈ um trecho);
+poucos minutos; **poucos centavos** de embeddings (uma vez). Termina com uma linha de
+resumo: `Ingestão (sucesso): verificadas=6 atualizadas=6 revogadas=0 avisos/erros=0`.
 
 **4. Conferir no banco** que os trechos foram gravados **com embedding**:
 
@@ -183,19 +185,71 @@ order by n.identificador;
 -- trechos > 0 e trechos == com_embedding para cada norma
 ```
 
-### Idempotência e reexecução
+### Sincronização automática do corpus (8B)
 
-A ingestão é **idempotente por `identificador`** da norma: `upsertNorma` não cria
-duplicata e, antes de inserir, `deleteTrechos(normaId)` **apaga os trechos antigos
-daquela norma** e regrava. Rodar `npm run ingest:corpus` duas vezes **não duplica**
-nada — a contagem por norma fica igual.
+O corpus é **local** (Supabase + pgvector) e se mantém **fresco** por um job de
+sincronização com a fonte oficial — sem depender de API externa por pergunta (frescor
++ velocidade + garantias de citação). Decisão de fonte registrada em
+`docs/spike-8b-fonte-legislacao.md` (Planalto como fonte; LexML não entrega vigência
+legível por máquina nem harvest incremental de forma estável — o slot de metadados
+externos fica pronto para o futuro).
 
-**Adicionar uma norma nova:** acrescente um item em `CORPUS_MANIFEST`
-(`scripts/corpus-manifest.ts`) com `sigla`, `titulo`, `identificador` (único),
-`fonteUrl` oficial e `dataPublicacao`, e rode `npm run ingest:corpus` de novo. As
-normas já presentes são **regravadas idênticas** (mesmo identificador) e a nova é
-adicionada — na prática, só ela "entra". (Reembeddar tudo custa centavos; se quiser
-ingerir só a nova, comente temporariamente as demais no manifesto.)
+**Como funciona** (`npm run sync:corpus`, mesmo motor da ingestão, sem `--force`):
+para cada norma do escopo curado → baixa o texto → normaliza → **hash SHA-256** →
+compara com o armazenado (**igual = pula**, idempotente; **diferente/nova = re-chunk
++ re-embed só dela**) → detecta **revogação** por marcador textual (defensivo: só
+marca revogada com sinal forte; nunca ressuscita em silêncio) → grava
+`ultima_sincronizacao`/`fonte_hash`/`revogada_em`. **Resiliente:** falha de uma norma
+(ex.: fonte offline) **não corrompe** o corpus existente nem aborta as demais; o erro
+fica no `corpus_sync_runs` e é re-tentado na próxima cadência. Serializado por
+advisory lock (não roda concorrente). Back-office: grava via pool, **sem
+`service_role`**; o caminho de mensagem do assinante não é afetado.
+
+**Cadência — Railway Cron Job (semanal).** Configure no Railway um **Cron Job**
+(processo SEPARADO do web server) com schedule semanal (ex.: `0 4 * * 1`) e comando:
+
+```bash
+npm run sync:corpus
+```
+
+Pause sem remover o agendamento com `CORPUS_SYNC_ENABLED=false`. (`CORPUS_SYNC_CRON`
+no `.env.example` é só documentação da cadência; quem agenda é o Railway.) Legislação
+muda devagar → semanal basta; **jurisprudência** muda rápido e virá pelo agregador
+pago (stub pronto), na cadência dele.
+
+**Sync manual / por norma:**
+
+```bash
+npm run sync:corpus                              # todas (incremental)
+npm run sync:corpus -- --norma "Lei nº 8.078/1990"   # só uma
+npm run sync:corpus -- --force                   # reconstrói tudo (= ingestão)
+```
+
+**Confirmar que uma norma foi atualizada/revogada** (SQL):
+
+```sql
+-- estado de sync por norma
+select identificador, vigencia_status, ultima_sincronizacao, revogada_em
+from corpus_normas order by identificador;
+
+-- último run (auditoria): contagens + avisos/erros
+select status, normas_verificadas, normas_atualizadas, normas_revogadas, erros,
+       iniciado_em, finalizado_em
+from corpus_sync_runs order by iniciado_em desc limit 1;
+```
+
+Uma norma **vigente** tem `vigencia_status='vigente'` e `revogada_em` nulo; uma
+**revogada** tem `vigencia_status='revogada'` + `revogada_em` preenchido e **nunca**
+é citada como base vigente (no máximo aparece como aviso "REVOGADA").
+
+### Idempotência e nova norma
+
+Rodar a sincronização (ou a ingestão) duas vezes **sem mudança na fonte = nenhum
+re-embed e nenhuma duplicação** (skip por `fonte_hash` igual; e `replaceTrechos`
+substitui de forma atômica quando muda). **Adicionar uma norma:** acrescente um item
+em `src/adapters/source/legislacao/manifest.ts` (`sigla`, `titulo`, `identificador`
+único, `fonteUrl` oficial, `dataPublicacao`) e rode `npm run sync:corpus` — as já
+presentes são puladas (hash igual) e **só a nova entra**.
 
 ### Validar o RAG pela CLI (sem WhatsApp)
 
@@ -515,7 +569,7 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0018)
+## Tabelas (migrações 0001–0019)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`
@@ -530,7 +584,9 @@ adiciona a cobrança (`cobranca_url`, `gateway_customer_id`) e a aplicação
 idempotente de eventos do Asaas (`app.apply_asaas_event`). A `0017` adiciona
 `compromissos.descricao` e `acoes_pendentes` (confirmar-antes-de-gravar, por tenant).
 A `0018` cria o **corpus compartilhado** do RAG (`corpus_normas`/`corpus_trechos`,
-pgvector + HNSW), com leitura pública e sem tenant.
+pgvector + HNSW), com leitura pública e sem tenant. A `0019` adiciona os **metadados
+de sincronização** (`fonte_hash`, `fonte_versao`, `ultima_sincronizacao`,
+`revogada_em`) e a auditoria `corpus_sync_runs` (back-office, RLS sem leitura pública).
 
 ## PENDENTE (fora do escopo atual)
 
@@ -540,13 +596,15 @@ Nada de mock que finja funcionar — o que não foi implementado está explícit
   idempotente e a máquina de estados estão **implementados**; falta a **validação
   real no sandbox** (conta/chaves/webhook) e a **aprovação dos templates de
   cobrança na Meta**. Pix Automático fino é refinamento futuro.
-- **Adapters externos** (`src/adapters/{courts,storage}`): **stubs que lançam
-  `NotImplementedError`**. (Os adapters de `classifier`, `interaction-log`,
-  `whatsapp`, `llm` e **`payment` (Asaas)** já são reais.)
-- **Cérebro 2 — validação manual + corpus:** o motor do RAG está pronto (8A); falta
-  **rodar a ingestão** (`npm run ingest:corpus`) e **validar** — já dá para validar
-  **sem WhatsApp** pela CLI (`npm run ask:rag -- "..."`, mesmo pipeline do handler);
-  depois pelo WhatsApp. **Jurisprudência** abrangente é o **8B** (agregador pago).
+- **Adapters externos** (`src/adapters/{courts,storage}` e a fonte de
+  **jurisprudência**): **stubs que lançam `NotImplementedError`**. (Os adapters de
+  `classifier`, `interaction-log`, `whatsapp`, `llm`, **`payment` (Asaas)** e a
+  **fonte de legislação (Planalto)** já são reais.)
+- **Cérebro 2 — validação + corpus:** o motor do RAG e a **sincronização** estão
+  prontos (8A+8B); falta **rodar a ingestão/sync** (`npm run ingest:corpus` /
+  `npm run sync:corpus`) e **validar** — já dá para validar **sem WhatsApp** pela CLI
+  (`npm run ask:rag -- "..."`, mesmo pipeline do handler); depois pelo WhatsApp.
+  **Jurisprudência** (agregador pago) é o próximo encaixe da mesma sincronização.
 - **Embeddings:** `EmbeddingsPort` (OpenAI) implementado; precisa de `EMBEDDINGS_*`.
 - **WhatsApp — validação manual e mídia:** o adapter é real, mas o handshake/
   entrega reais com a Meta e o template aprovado exigem **verificação manual**

@@ -1,97 +1,51 @@
 /**
- * Ingestão do corpus jurídico (back-office, passo de OPS).
+ * Ingestão inicial do corpus jurídico (back-office, passo de OPS).
  *
- * Para cada norma do manifesto: baixa o texto oficial → chunkLegislacao (por
- * artigo) → embed (em lotes) → grava em corpus_normas/corpus_trechos. Idempotente
- * por identificador (reingestão substitui os trechos). Source-agnostic.
+ * É o MESMO motor da sincronização (`syncCorpus`), aqui com `force` (reconstrói:
+ * re-chunk + re-embed de todas as normas do manifesto, mesmo sem mudança). Idempotente
+ * por identificador. Para a manutenção contínua (incremental), use `npm run sync:corpus`.
  *
- * Requer EMBEDDINGS_* e DATABASE_URL no ambiente. Uso:
+ * Requer EMBEDDINGS_* e DATABASE_URL. Uso:
  *   npm run ingest:corpus
  */
+import { supabaseCorpusSyncStore } from '../src/adapters/corpus/supabase-corpus-sync-store.js';
 import { requireEmbeddingsConfig } from '../src/adapters/embeddings/config.js';
 import { createEmbeddingsAdapter } from '../src/adapters/embeddings/factory.js';
-import { chunkLegislacao } from '../src/core/domain/cerebro2/chunk-legislacao.js';
-import { deleteTrechos, insertTrecho, upsertNorma } from '../src/infra/db/corpus-store.js';
+import { PlanaltoLegislacaoSource } from '../src/adapters/source/legislacao/planalto-source.js';
+import { syncCorpus } from '../src/application/cerebro2/sync-corpus.js';
 import { closeDatabase } from '../src/infra/db/tenant.js';
-import { CORPUS_MANIFEST } from './corpus-manifest.js';
 
-const BATCH = 64;
-
-function htmlToText(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|tr|li)>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&#(\d+);/g, (_m, n: string) => String.fromCharCode(Number(n)))
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{2,}/g, '\n')
-    .trim();
-}
-
-async function fetchTexto(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} ao baixar ${url}`);
-  return htmlToText(await res.text());
-}
+const logger = {
+  info(obj: Record<string, unknown>, msg?: string): void {
+    console.log('[ingest]', msg ?? '', JSON.stringify(obj));
+  },
+  error(obj: Record<string, unknown>, msg?: string): void {
+    console.error('[ingest][erro]', msg ?? '', JSON.stringify(obj));
+  },
+};
 
 async function main(): Promise<void> {
+  const source = new PlanaltoLegislacaoSource();
   const embeddings = createEmbeddingsAdapter(requireEmbeddingsConfig());
 
-  for (const item of CORPUS_MANIFEST) {
-    console.log(`\n→ ${item.identificador} (${item.sigla})`);
-    const texto = await fetchTexto(item.fonteUrl);
-    const chunks = chunkLegislacao(texto, {
-      sigla: item.sigla,
-      identificador: item.identificador,
-      fonteUrl: item.fonteUrl,
-    });
-    if (chunks.length === 0) {
-      console.warn('  0 trechos — verifique a URL/parser; pulando.');
-      continue;
-    }
+  const result = await syncCorpus(
+    { source, embeddings, store: supabaseCorpusSyncStore, logger },
+    { force: true },
+  );
 
-    const normaId = await upsertNorma({
-      tipo: 'legislacao',
-      titulo: item.titulo,
-      identificador: item.identificador,
-      dataPublicacao: item.dataPublicacao ?? null,
-      vigenciaStatus: 'vigente',
-      fonteUrl: item.fonteUrl,
-    });
-    await deleteTrechos(normaId);
-
-    for (let i = 0; i < chunks.length; i += BATCH) {
-      const slice = chunks.slice(i, i + BATCH);
-      const vectors = await embeddings.embed(slice.map((c) => c.texto));
-      for (let j = 0; j < slice.length; j++) {
-        const c = slice[j]!;
-        await insertTrecho(normaId, {
-          artigo: c.artigo,
-          paragrafo: c.paragrafo,
-          inciso: c.inciso,
-          ordem: c.ordem,
-          texto: c.texto,
-          citacao: c.citacao,
-          fonteUrl: item.fonteUrl,
-          embedding: vectors[j]!,
-        });
-      }
-      console.log(`  ${Math.min(i + BATCH, chunks.length)}/${chunks.length} trechos`);
-    }
-  }
-
-  console.log('\nIngestão concluída.');
-  await closeDatabase();
+  console.log(
+    `\nIngestão (${result.status}): verificadas=${result.normasVerificadas} ` +
+      `atualizadas=${result.normasAtualizadas} revogadas=${result.normasRevogadas} ` +
+      `avisos/erros=${result.erros.length}`,
+  );
+  for (const e of result.erros) console.log(`  • ${e.identificador}: ${e.erro}`);
 }
 
-main().catch(async (err) => {
-  console.error('Falha na ingestão:', err);
-  await closeDatabase().catch(() => {});
-  process.exit(1);
-});
+main()
+  .catch((err) => {
+    console.error('Falha na ingestão:', err);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await closeDatabase().catch(() => {});
+  });

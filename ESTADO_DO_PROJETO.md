@@ -6,11 +6,14 @@
 
 ## Fase atual
 
-- **Fase 2 (Inteligência).** Concluído o **Passo 8A — Cérebro 2 (RAG jurídico,
-  legislação)**: corpus compartilhado (pgvector), embeddings OpenAI, pipeline
-  recuperar→citar→validar→recusar com os 3 tipos (A/B/C) e antialucinação. Falta
-  **rodar a ingestão** (`npm run ingest:corpus`) e **validar em produção**.
-  Próximo: **8B — agregador pago (jurisprudência)** ou **Cérebro 3 (tribunais)**.
+- **Fase 2 (Inteligência).** Concluídos o **Passo 8A — Cérebro 2 (RAG jurídico)** e o
+  **Passo 8B — fontes pluggáveis + sincronização automática do corpus**: corpus
+  LOCAL (Supabase+pgvector) que se mantém fresco por job de sync com a fonte oficial
+  (Planalto), detectando novo/alterado/revogado, re-embedando só o que muda, com
+  vigência na busca (revogada nunca afirma) — tudo sem afrouxar o antialucinação.
+  Falta **rodar a ingestão/sync** (`npm run ingest:corpus` / `sync:corpus`),
+  **agendar o Railway Cron** (semanal) e **validar** (CLI `ask:rag` e/ou WhatsApp).
+  Próximo: **jurisprudência** (agregador pago, mesma sync) ou **Cérebro 3 (tribunais)**.
   Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B), RAG.
 
 ## O que já está pronto
@@ -86,6 +89,16 @@
   (`scripts/ask-rag.ts`) instancia o **mesmo `Cerebro2Handler`** (não é cópia) e
   imprime resposta + fontes validadas. Roteiro de ingestão (com checagem da 0018 e
   query de contagem), idempotência e validação manual A/B/C documentados no README.
+- **Passo 8B — fontes pluggáveis + sincronização automática.** `SourcePort`
+  provider-agnostic; `PlanaltoLegislacaoSource` (texto consolidado, latin1, detecção
+  de revogação defensiva por marcador) + **stub** de jurisprudência (agregador pago) +
+  slot `LegalMetadataSource` (LexML/normas) como interface pronta. **Motor `syncCorpus`
+  reutilizável** (ingest = sync com `force`): hash SHA-256 → skip/re-embed por norma →
+  vigência sticky → resiliência por norma → auditoria `corpus_sync_runs`. Migração
+  0019 (validada em Postgres+pgvector). Vigência na busca (revogada fora do allowlist —
+  aditivo ao 8A). `scripts/sync-corpus.ts` (`--norma`/`--force`, advisory lock),
+  Railway Cron semanal. Decisão de fonte: `docs/spike-8b-fonte-legislacao.md`.
+  **182 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -135,6 +148,13 @@
 - **Corpus do RAG é compartilhado, não-tenant** (oposto do Cérebro 1): leitura
   pública. **Embeddings = provedor próprio** (Anthropic não tem). RAG só **afirma
   com fonte validada**; A/B/C com antialucinação inviolável nas afirmações.
+- **Corpus LOCAL sincronizado, não cópia congelada nem API por pergunta:** a
+  recuperação semântica é nossa (embeddings); o job de sync dá frescor sem latência/
+  indisponibilidade externa no caminho da pergunta. **Fonte = Planalto** (texto
+  consolidado + revogação por marcador); LexML/metadados externos ficam como slot
+  futuro (spike provou que não entrega vigência/harvest estáveis hoje). Mudança por
+  **hash**, revogação **defensiva e sticky**, **resiliência por norma**; revogada
+  nunca é citada como vigente. Sync é **back-office** (pool, sem service_role).
 
 ## PENDENTE (explícito)
 
@@ -142,12 +162,16 @@
   configurar o webhook (por último), simular pagar→desbloquear. Aprovação dos
   **templates de cobrança na Meta** (avisos fora da janela 24h). Pix Automático
   fino = refinamento futuro.
-- Adapters reais ainda stubs: `courts`, `storage`.
-  (`whatsapp`, `llm`, `payment`/Asaas e `embeddings` já são reais.)
-- **Cérebro 2 — rodar a ingestão** (`npm run ingest:corpus`) e **validar**: já dá
-  para validar **sem WhatsApp** pela CLI `npm run ask:rag -- "..."` (mesmo pipeline
-  do handler; roteiro A/B/C no README); depois validar também pelo WhatsApp.
-- **8B — agregador pago (jurisprudência)** + legislação ampliada (mesma ingestão).
+- Adapters reais ainda stubs: `courts`, `storage`, **fonte de jurisprudência**.
+  (`whatsapp`, `llm`, `payment`/Asaas, `embeddings` e **fonte de legislação/Planalto**
+  já são reais.)
+- **Cérebro 2 — rodar a ingestão/sync e agendar:** `npm run ingest:corpus` (carga) e
+  `npm run sync:corpus` (incremental); **agendar o Railway Cron semanal**; **validar**
+  sem WhatsApp pela CLI `npm run ask:rag -- "..."` (roteiro A/B/C no README) e depois
+  pelo WhatsApp. Confirmar revogação/vigência via `corpus_sync_runs`/`corpus_normas`.
+- **Jurisprudência — agregador pago:** plugar adapter real no `SourcePort` (stub
+  pronto), respeitando os termos de uso; usa a MESMA sincronização. Ampliar o
+  manifesto de legislação conforme necessário.
 - **Validar em produção** (acumulado): Cérebro 1, pagamento sandbox (6B), RAG.
 - **Onboarding — verificação real da inscrição na OAB** contra fonte externa
   (removida do fluxo obrigatório; pode virar opção futura).
@@ -166,10 +190,11 @@
 
 ## Próximos passos previstos
 
-1. **Rodar a ingestão do corpus** e **validar o RAG em produção** (dispositivo
-   real cita certo; armadilha recusa); validar também C1 e pagamento sandbox.
-2. **8B — agregador pago (jurisprudência)** com a mesma ingestão, ou **Cérebro 3
-   (tribunais)**.
+1. **Rodar a ingestão/sync do corpus**, **agendar o Railway Cron semanal** e
+   **validar o RAG** (dispositivo real cita certo; armadilha recusa; revogada não
+   afirma); validar também C1 e pagamento sandbox.
+2. **Jurisprudência — agregador pago** plugado no `SourcePort` (mesma sync), ou
+   **Cérebro 3 (tribunais)**.
 3. Incrementos do Cérebro 1 (honorários/custos, edição, lembretes proativos);
    dunning de cobrança; mídia→Storage.
 

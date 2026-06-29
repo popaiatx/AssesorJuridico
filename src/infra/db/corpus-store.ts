@@ -101,6 +101,31 @@ export async function replaceTrechos(normaId: string, trechos: TrechoInput[]): P
 
 // --- Sincronização (Passo 8B, back-office) ---
 
+// Chave do advisory lock que serializa o sync do corpus (evita execução concorrente).
+const SYNC_LOCK_KEY = 8201;
+
+/**
+ * Executa `fn` segurando um advisory lock dedicado: se outra sync já está em
+ * andamento, NÃO roda e retorna `null`. Usa uma conexão reservada (o pooler em modo
+ * transaction não mantém lock de sessão entre statements de conexões diferentes).
+ */
+export async function withSyncLock<T>(fn: () => Promise<T>): Promise<T | null> {
+  const reserved = await pool.reserve();
+  try {
+    const got = await reserved<{ locked: boolean }[]>`
+      select pg_try_advisory_lock(${SYNC_LOCK_KEY}) as locked
+    `;
+    if (!got[0]?.locked) return null;
+    try {
+      return await fn();
+    } finally {
+      await reserved`select pg_advisory_unlock(${SYNC_LOCK_KEY})`;
+    }
+  } finally {
+    reserved.release();
+  }
+}
+
 /** Estado de sync de uma norma, lido por identificador (null se ainda não existe). */
 export async function getNormaSyncState(identificador: string): Promise<NormaSyncState | null> {
   const rows = await pool<
