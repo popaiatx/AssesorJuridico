@@ -16,7 +16,6 @@
  *    de onboarding; não implementado aqui para não fingir funcionar.
  */
 import { pool } from './pool.js';
-import { NotImplementedError } from '../../core/errors.js';
 
 const PHONE_RE = /^\+?[0-9]{8,15}$/;
 
@@ -34,15 +33,39 @@ export async function resolveAssinanteByPhone(phone: string): Promise<string | n
   return rows[0]?.id ?? null;
 }
 
+export interface CreateAssinanteOnboardingInput {
+  telefone: string;
+  nome: string;
+  oabNumero: string;
+  oabSeccional: string;
+  documento: string;
+  email: string | null;
+  consentVersao: string;
+  canal: string;
+}
+
 /**
- * Cria o assinante no onboarding. PONTO ÚNICO de criação (não duplicar em
- * outro lugar). PENDENTE: o fluxo de onboarding é uma funcionalidade da Fase 1
- * que será implementada num passo próprio. Quando for implementado, deve usar
- * um caminho privilegiado controlado (SECURITY DEFINER dedicado ou o cliente
- * admin isolado), nunca espalhando service_role pelo domínio.
+ * Cria o assinante no onboarding — PONTO ÚNICO de criação. Insere o assinante em
+ * TRIAL e grava o consentimento de IA atomicamente, via a função SECURITY DEFINER
+ * `app.create_assinante_onboarding` (migração 0014). Roda no caminho da mensagem,
+ * por isso NÃO usa service_role (consistente com `resolveAssinanteByPhone`).
+ * Retorna o `assinante_id`.
  */
-export async function createAssinanteOnboarding(_input: unknown): Promise<never> {
-  throw new NotImplementedError(
-    'createAssinanteOnboarding: onboarding ainda não implementado (Fase 1, passo futuro).',
-  );
+export async function createAssinanteOnboarding(
+  input: CreateAssinanteOnboardingInput,
+): Promise<string> {
+  if (!PHONE_RE.test(input.telefone)) {
+    throw new Error('createAssinanteOnboarding: telefone em formato inválido.');
+  }
+  const rows = await pool<{ id: string }[]>`
+    select app.create_assinante_onboarding(
+      ${input.telefone}, ${input.nome}, ${input.oabNumero}, ${input.oabSeccional},
+      ${input.documento}, ${input.email ?? ''}, ${input.consentVersao}, ${input.canal}
+    ) as id
+  `;
+  const id = rows[0]?.id;
+  if (!id) {
+    throw new Error('createAssinanteOnboarding: criação não retornou id.');
+  }
+  return id;
 }
