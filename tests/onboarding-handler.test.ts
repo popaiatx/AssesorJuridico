@@ -50,8 +50,6 @@ describe('OnboardingHandler', () => {
 
     await handler.handle(ctx('oi')); // primeiro contato
     await handler.handle(ctx('Maria Silva'));
-    await handler.handle(ctx('123456/SP'));
-    await handler.handle(ctx('111.444.777-35'));
     await handler.handle(ctx('maria@adv.com'));
     const final = await handler.handle(ctx('aceito'));
 
@@ -59,16 +57,14 @@ describe('OnboardingHandler', () => {
     expect(created[0]).toEqual({
       telefone: phone,
       nome: 'Maria Silva',
-      oabNumero: '123456',
-      oabSeccional: 'SP',
-      documento: '11144477735',
       email: 'maria@adv.com',
       consentVersao: '1.0',
       canal: 'whatsapp',
+      trialDias: 3,
     });
     expect(await store.get(phone)).toBeNull(); // estado limpo
     expect(audit.at(-1)).toEqual({ phone, etapa: 'concluido', evento: 'consentiu' });
-    expect(final.replyText.toLowerCase()).toContain('trial');
+    expect(final.replyText.toLowerCase()).toContain('3 dias');
   });
 
   it('persiste o estado entre mensagens e audita cada etapa', async () => {
@@ -76,7 +72,7 @@ describe('OnboardingHandler', () => {
     await handler.handle(ctx('oi'));
     expect((await store.get('5511999990001'))?.etapa).toBe('aguardando_nome');
     await handler.handle(ctx('Maria'));
-    expect((await store.get('5511999990001'))?.etapa).toBe('aguardando_oab');
+    expect((await store.get('5511999990001'))?.etapa).toBe('aguardando_email');
     expect(audit.map((e) => e.evento)).toContain('validou_nome');
   });
 });
@@ -100,7 +96,7 @@ describe('transição número-desconhecido → onboarding → assinante → tena
       interactionLog: new InMemoryInteractionLog(),
     });
 
-    const seq = ['oi', 'Maria Silva', '123456/SP', '111.444.777-35', 'maria@adv.com', 'aceito'];
+    const seq = ['oi', 'Maria Silva', 'maria@adv.com', 'aceito'];
     let last;
     for (const t of seq) last = await orch.handleInboundMessage(makeMessage(t));
     expect(last!.intent).toBe('onboarding'); // ainda onboarding (resolve era null no início da msg)

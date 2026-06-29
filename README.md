@@ -106,26 +106,40 @@ os próximos passos); nenhuma ferramenta de escrita está ligada ainda.
 - **Recomendado em dev:** `LLM_PROVIDER=anthropic`, `LLM_MODEL=claude-haiku-4-5`
   (barato e rápido — importa para a latência do webhook, §abaixo).
 
-## Onboarding (cadastro de número novo)
+## Onboarding (cadastro enxuto) + trial de 3 dias
 
-Quando um número **não cadastrado** escreve, o orquestrador roteia para o
-`OnboardingHandler` — uma **máquina de estados determinística** (sem LLM
-decidindo fluxo), que sobrevive entre mensagens:
+Barreira de entrada baixa: serve para advogados, estudantes e curiosos. Quando um
+número **não cadastrado** escreve, o `OnboardingHandler` (máquina de estados
+determinística, sobrevive entre mensagens) conduz:
 
-`boas-vindas → nome → OAB (número + seccional) → CPF/CNPJ → e-mail → termo de uso
-de IA (aceite ativo) → criação do assinante (status trial) → ativação + tutorial`.
+`intro acolhedora → nome → e-mail → termo de uso de IA (aceite em 1 toque) →
+criação do assinante (trial 3 dias) → boas-vindas`.
 
-- **Validação** de cada campo (OAB com UF válida; CPF/CNPJ com dígito verificador;
-  e-mail). **Verificação real da inscrição na OAB contra fonte externa = PENDENTE.**
+- **Só pede nome e e-mail** (e-mail validado; re-pergunta se inválido). O telefone
+  do WhatsApp é o identificador. **Sem OAB e sem CPF/CNPJ** no fluxo (colunas
+  agora nulas; informar OAB depois fica para o futuro).
 - **Robustez:** `cancelar`/`recomeçar` reinicia; mensagem fora do roteiro ou só
   mídia → re-explica e permanece na etapa (nunca pula validação).
 - **Criação:** ponto único `app.create_assinante_onboarding` (SECURITY DEFINER,
-  **sem service_role no caminho da mensagem**) — cria o assinante (trial) e grava
-  o consentimento (versão + timestamp) atomicamente. Criado o assinante, a próxima
-  mensagem resolve para o tenant e segue o caminho normal (`withTenant`).
-- **Auditoria pré-tenant** (`onboarding_eventos`, tabela travada): registra o funil
-  com o **telefone em hash** (sem dado sensível em claro) — fecha o ponto cego R-B.
-- **Trial:** a conta entra em teste; **pagamento segue stub** (sem cobrança).
+  **sem service_role no caminho da mensagem**) — cria o assinante, grava o
+  consentimento (versão + timestamp) e cria a **assinatura `trial` com
+  `trial_fim = now() + 3 dias`**, atomicamente.
+- **Auditoria pré-tenant** (`onboarding_eventos`, tabela travada): funil com o
+  **telefone em hash** (sem dado sensível em claro).
+
+### Porteiro de acesso (bloqueio após o trial) — fail-closed
+
+A **cada mensagem** de um assinante, o orquestrador consulta o porteiro **antes**
+de rotear (lê `status` + `trial_fim` da `assinaturas` via `withTenant`):
+
+- **Libera** só com confirmação positiva: assinatura `ativa` **ou** `trial` dentro
+  do prazo.
+- **Bloqueia** (e desvia TUDO para o fluxo de pagamento) em qualquer outro caso —
+  trial vencido, `trial_fim` nulo, sem assinatura, status inesperado, **ou erro ao
+  ler** (mesmo princípio do RLS fail-closed). Onboarding e o próprio pagamento
+  seguem acessíveis.
+- No **Passo 6A**, o handler de pagamento é **placeholder honesto** (avisa que o
+  teste terminou; **sem link/cobrança falsa**). A cobrança real (Asaas) vem no **6B**.
 
 ## Deploy e ativação (modo desenvolvimento real)
 
@@ -186,6 +200,14 @@ produção. `/health` e o webhook funcionam atrás do HTTPS/proxy de uma platafo
 **5) Trocar mensagens reais:** de um número novo, passe pelo onboarding → conta
    trial criada → o ciclo **WhatsApp → orquestrador → LLM → resposta** passa a
    valer. Dúvidas gerais/ajuda vêm do LLM; ações seguem placeholders honestos.
+
+**6) Testar o trial de 3 dias e o BLOQUEIO** (sem esperar 3 dias):
+   - Aplique a migração no Supabase: `supabase db push` (inclui a `0015`).
+   - Faça o onboarding (passo 4) → conta em trial → converse normalmente.
+   - **Force o fim do trial:** `npm run trial:expire -- 5511999990001` — coloca
+     `trial_fim` no passado. A **próxima mensagem** é bloqueada e desviada para o
+     fluxo de pagamento (placeholder honesto no 6A; cobrança real virá no 6B).
+   - Para voltar a testar do zero: `npm run reset:assinante -- <telefone>`.
 
 ### Caminho rápido (iteração local)
 
@@ -262,7 +284,7 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0013)
+## Tabelas (migrações 0001–0015)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`
@@ -271,12 +293,17 @@ de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 tenant e índices nas FKs e colunas de filtro. A `0013` adiciona as tabelas
 travadas do webhook (`whatsapp_mensagens_processadas`, `whatsapp_contatos_janela`)
 e a `0014` as do onboarding (`onboarding_estado`, `onboarding_eventos`) —
-manipuladas só por funções `SECURITY DEFINER`.
+manipuladas só por funções `SECURITY DEFINER`. A `0015` torna OAB/documento
+opcionais e cria a assinatura `trial` (com `trial_fim`) no cadastro.
 
 ## PENDENTE (fora do escopo atual)
 
 Nada de mock que finja funcionar — o que não foi implementado está explícito:
 
+- **Pagamento (Passo 6B):** o porteiro já bloqueia após o trial, mas a **cobrança
+  real é PENDENTE** — adapter Asaas (sandbox), link de pagamento, webhook
+  idempotente e máquina de estados da assinatura. Hoje o bloqueio responde um
+  **placeholder honesto** (sem cobrança).
 - **Adapters externos** (`src/adapters/{payment,courts,storage}`): **stubs que
   lançam `NotImplementedError`**. Implementação real em fases próprias. (Os
   adapters de `classifier`, `interaction-log`, `whatsapp` e **`llm`** já são reais.)

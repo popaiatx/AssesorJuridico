@@ -6,11 +6,11 @@
 
 ## Fase atual
 
-- **Fase 1 (Núcleo).** Concluído o **Passo 5 — Onboarding + criação de assinante**.
-  Ciclo no WhatsApp já validado em produção (Railway) nos passos anteriores;
-  falta **validar em produção o fluxo de número novo** (onboarding completo →
-  trial) — sua parte, com o guia no README (`reset:assinante` ou 2º número).
-  Próximo: cérebros (C1 NL→SQL) ou pagamento (Asaas).
+- **Fase 1 (Núcleo).** Concluído o **Passo 6A — Onboarding enxuto + trial 3 dias +
+  porteiro (fail-closed)**. Onboarding já validado em produção. Falta **validar em
+  produção o bloqueio pós-trial** (guia no README: `trial:expire`). Próximo:
+  **Passo 6B — Asaas (sandbox): cobrança real, webhook idempotente, máquina de
+  estados da assinatura**.
 
 ## O que já está pronto
 
@@ -46,7 +46,15 @@
   criação atômica em **trial** + consentimento via SECURITY DEFINER (sem
   service_role no caminho da mensagem); **auditoria pré-tenant** com telefone em
   hash (fecha R-B); `reset:assinante` para testar número novo. Migração 0014
-  validada em Postgres 15. **102 testes verdes.**
+  validada em Postgres 15.
+- **Passo 6A — Onboarding enxuto + trial + porteiro.** Cadastro reduzido a
+  **nome + e-mail + consentimento** (OAB/documento removidos do fluxo e nulos no
+  banco). Assinatura **`trial` de 3 dias** criada no onboarding (`trial_fim`),
+  fonte única de status. **Porteiro fail-closed** no orquestrador, antes de
+  rotear: só libera com `ativa` ou trial no prazo; qualquer outra coisa (vencido,
+  sem dado, erro de leitura) **bloqueia e desvia para pagamento** (placeholder
+  honesto em 6A). `trial:expire` para testar o bloqueio. Migração 0015 validada em
+  Postgres 15. **114 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -78,19 +86,24 @@
   caminho de produção em escala — viável neste host de processo (registrado).
 - **Servidor pronto para hospedagem:** escuta `0.0.0.0`/`process.env.PORT`,
   `npm start` em produção; Render/Railway (não Vercel — é servidor persistente).
-- **Onboarding determinístico** (sem LLM no controle de fluxo); criação em **trial**
-  por ponto único SECURITY DEFINER; consentimento gravado (versão + timestamp);
+- **Onboarding determinístico** (sem LLM no controle de fluxo); cadastro enxuto
+  (nome+e-mail); criação em **trial** por ponto único SECURITY DEFINER;
   **auditoria pré-tenant com telefone em hash** (fecha o R-B).
+- **Status da assinatura = fonte única de verdade do acesso** na tabela
+  `assinaturas` (`status` + `trial_fim`); `assinantes.status` não é usado para gate.
+- **Porteiro fail-closed:** bloqueia por padrão; só libera com confirmação positiva
+  (ativa ou trial no prazo). Erro de leitura/estado inesperado → bloqueia.
 
 ## PENDENTE (explícito)
 
+- **Pagamento (Passo 6B):** cobrança real Asaas (sandbox) — adapter, link,
+  webhook idempotente, máquina de estados; hoje o bloqueio é placeholder honesto.
 - Adapters reais ainda stubs: `payment`, `courts`, `storage`.
   (`whatsapp` e `llm` já são reais.)
-- **Validar em produção o fluxo de número novo** (onboarding completo → trial →
-  conversar) — guia no README (`reset:assinante` ou 2º número). (O ciclo
-  mensagem→LLM→resposta já foi validado em produção.)
+- **Validar em produção o bloqueio pós-trial** (`trial:expire` → mensagem
+  bloqueada) — guia no README.
 - **Onboarding — verificação real da inscrição na OAB** contra fonte externa
-  (hoje só valida formato número+UF).
+  (removida do fluxo obrigatório; pode virar opção futura).
 - **WhatsApp:** **download de mídia + Storage** (mídia hoje só placeholder);
   template aprovado na Meta.
 - **LLM:** `embed` (fase RAG) e **nenhuma ferramenta de escrita ligada** ainda
@@ -105,10 +118,11 @@
 
 ## Próximos passos previstos
 
-1. **Validar em produção o onboarding de número novo** → trial (guia no README).
-2. Cérebros: C1 (NL→SQL — dados do escritório) ou C2 (RAG jurídico).
-3. Pagamento (Asaas, idempotência de webhook) — tirar do stub.
-4. Verificação real da OAB; mídia→Storage; fila durável do webhook.
+1. **Passo 6B — Asaas (sandbox):** cobrança real, link de pagamento, webhook
+   idempotente, máquina de estados da assinatura, notificações por template.
+2. Validar em produção: bloqueio pós-trial (6A) e, depois, pagar→desbloquear (6B).
+3. Cérebros: C1 (NL→SQL — dados do escritório) ou C2 (RAG jurídico).
+4. Mídia→Storage; fila durável do webhook; verificação real da OAB (opcional).
 
 ## Como rodar
 
