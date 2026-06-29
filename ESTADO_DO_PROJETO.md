@@ -82,6 +82,10 @@
   `duvida_juridica`→C2 (só com LLM+embeddings). Log por tenant grava `cerebro` +
   `fontes`. Ingestão `npm run ingest:corpus` (CF/CC/CPC/CLT/CDC/8.213). Migração
   0018 validada em Postgres+pgvector. **162 testes verdes.**
+- **Validação local do RAG sem WhatsApp:** `npm run ask:rag -- "pergunta"`
+  (`scripts/ask-rag.ts`) instancia o **mesmo `Cerebro2Handler`** (não é cópia) e
+  imprime resposta + fontes validadas. Roteiro de ingestão (com checagem da 0018 e
+  query de contagem), idempotência e validação manual A/B/C documentados no README.
 
 ## Decisões técnicas-chave
 
@@ -140,8 +144,9 @@
   fino = refinamento futuro.
 - Adapters reais ainda stubs: `courts`, `storage`.
   (`whatsapp`, `llm`, `payment`/Asaas e `embeddings` já são reais.)
-- **Cérebro 2 — rodar a ingestão** (`npm run ingest:corpus` com `EMBEDDINGS_*`) e
-  **validar em produção** (dispositivo real, orientação, fora-do-corpus, armadilha).
+- **Cérebro 2 — rodar a ingestão** (`npm run ingest:corpus`) e **validar**: já dá
+  para validar **sem WhatsApp** pela CLI `npm run ask:rag -- "..."` (mesmo pipeline
+  do handler; roteiro A/B/C no README); depois validar também pelo WhatsApp.
 - **8B — agregador pago (jurisprudência)** + legislação ampliada (mesma ingestão).
 - **Validar em produção** (acumulado): Cérebro 1, pagamento sandbox (6B), RAG.
 - **Onboarding — verificação real da inscrição na OAB** contra fonte externa

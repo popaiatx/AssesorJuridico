@@ -122,16 +122,134 @@ legislação real, **com citação validada**; sem fonte, **recusa**. Atende
   de **orientação geral**; nunca apresenta norma como vigente sem o status do corpus.
 
 ### Ingestão do corpus (passo de OPS — você roda)
-`npm run ingest:corpus` (precisa de `EMBEDDINGS_*` + `DATABASE_URL`): baixa as leis
-do manifesto (`scripts/corpus-manifest.ts`: CF/88, CC, CPC, CLT, CDC, Lei 8.213/91),
-faz o **chunking por artigo**, embeda e grava o corpus. Idempotente por norma.
-Custo de embeddar o conjunto inicial: **poucos centavos** (uma vez).
 
-**Validar (produção):** após a ingestão, pelo WhatsApp — (A) pergunte um dispositivo
-real (ex.: direito de arrependimento do CDC) e confira a citação; (B) peça uma
-orientação geral e veja resposta útil sem dispositivo inventado; (C) pergunte algo
-fora do corpus e veja resposta transparente; e uma **armadilha** (lei que não
-existe) → deve **recusar**, nunca inventar.
+Carrega a legislação real no corpus do RAG. **Roteiro de ponta a ponta:**
+
+**1. Pré-requisito — migração `0018` aplicada** (cria `pgvector` + `corpus_normas`/
+`corpus_trechos`). Aplique as migrações no Supabase e confirme que as tabelas existem:
+
+```bash
+supabase db push        # aplica as migrações pendentes (entre elas a 0018)
+```
+
+Confirmação rápida (SQL Editor do Supabase ou `psql`):
+
+```sql
+select to_regclass('public.corpus_normas')  as normas,
+       to_regclass('public.corpus_trechos') as trechos;   -- ambas != null
+select extname from pg_extension where extname = 'vector'; -- 1 linha
+```
+
+**2. Variáveis no `.env`** (a ingestão lê do ambiente; nada vai para o git):
+
+```ini
+# Embeddings (provedor próprio — a Anthropic não tem)
+EMBEDDINGS_PROVIDER=openai
+EMBEDDINGS_MODEL=text-embedding-3-small      # 1536 dims (a coluna é vector(1536))
+EMBEDDINGS_API_KEY=sk-...                     # OpenAI Platform
+RAG_MIN_SIMILARITY=0.3                         # limiar p/ um trecho virar "fonte"
+
+# Banco — aponte para o Supabase via POOLER (modo transaction, porta 6543)
+DATABASE_URL=postgresql://USER.PROJECT-ref:PASSWORD@aws-REGION.pooler.supabase.com:6543/postgres
+```
+
+> A ingestão **grava** — pode usar a role do pooler (passa pelo RLS; a política de
+> escrita do corpus é de back-office). Não use `service_role` no caminho de assinante.
+
+**3. Rodar:**
+
+```bash
+npm run ingest:corpus
+```
+
+**O que esperar na saída:** uma seção por norma do manifesto
+(`scripts/corpus-manifest.ts`: **6 normas** — CF/88, CC, CPC, CLT, CDC, Lei 8.213/91),
+com o progresso `N/M trechos` por lote (lotes de 64). Para cada norma: baixa o texto
+oficial do Planalto → **chunking por artigo** → embeda → grava. Ordem de grandeza:
+**alguns milhares de trechos** no total (um artigo ≈ um trecho); poucos minutos de
+execução; **poucos centavos** de custo de embeddings (uma vez). Termina em
+`Ingestão concluída.`.
+
+**4. Conferir no banco** que os trechos foram gravados **com embedding**:
+
+```sql
+select n.identificador,
+       count(t.id)                                  as trechos,
+       count(t.embedding)                           as com_embedding
+from corpus_normas n
+left join corpus_trechos t on t.norma_id = n.id
+group by n.identificador
+order by n.identificador;
+-- trechos > 0 e trechos == com_embedding para cada norma
+```
+
+### Idempotência e reexecução
+
+A ingestão é **idempotente por `identificador`** da norma: `upsertNorma` não cria
+duplicata e, antes de inserir, `deleteTrechos(normaId)` **apaga os trechos antigos
+daquela norma** e regrava. Rodar `npm run ingest:corpus` duas vezes **não duplica**
+nada — a contagem por norma fica igual.
+
+**Adicionar uma norma nova:** acrescente um item em `CORPUS_MANIFEST`
+(`scripts/corpus-manifest.ts`) com `sigla`, `titulo`, `identificador` (único),
+`fonteUrl` oficial e `dataPublicacao`, e rode `npm run ingest:corpus` de novo. As
+normas já presentes são **regravadas idênticas** (mesmo identificador) e a nova é
+adicionada — na prática, só ela "entra". (Reembeddar tudo custa centavos; se quiser
+ingerir só a nova, comente temporariamente as demais no manifesto.)
+
+### Validar o RAG pela CLI (sem WhatsApp)
+
+`scripts/ask-rag.ts` roda **exatamente o mesmo pipeline** do `Cerebro2Handler` (não é
+cópia: instancia o próprio handler com as mesmas dependências do servidor) — embed →
+recuperar → gerar → validar citação → recusar — e imprime a resposta + as **fontes
+validadas**. Precisa de `LLM_*`, `EMBEDDINGS_*` e `DATABASE_URL`:
+
+```bash
+npm run ask:rag -- "qual o prazo de contestação no CPC?"
+```
+
+#### Roteiro de validação manual (após a ingestão)
+
+Rode cada exemplo e compare com o **resultado esperado**:
+
+**(A) Afirmação com fonte** — deve **citar o artigo real e correto**:
+
+```bash
+npm run ask:rag -- "qual o prazo para contestação no processo civil?"
+npm run ask:rag -- "o consumidor tem direito de desistir de compra feita pela internet?"
+npm run ask:rag -- "qual a carência para auxílio-doença na Lei 8.213/91?"
+```
+
+- Esperado (A): resposta no bloco **📚 Com base no acervo**, com **Fontes** listando o
+  dispositivo certo — ex.: prazo de contestação → **art. 335 do CPC** (15 dias);
+  arrependimento do consumidor → **art. 49 do CDC** (7 dias); carência → **art. 25 da
+  Lei 8.213/91**. As fontes impressas batem com o que o texto afirma. Nenhuma citação
+  fora da lista de fontes (citação fabricada é **descartada** na fronteira).
+
+**(B) Orientação geral** — útil, **rotulada como orientação**, sem inventar dispositivo:
+
+```bash
+npm run ask:rag -- "o que eu costumo precisar para organizar um caso trabalhista?"
+```
+
+- Esperado (B): resposta marcada como **orientação geral** (apoio), conceitual
+  (documentos, provas, prazos a observar), **sem** afirmar "art. X" como base legal.
+  `Fontes citadas: nenhuma`. Se mencionar um dispositivo concreto, ele vem do acervo
+  com citação ou remete a conferir na fonte.
+
+**(C) Sem fonte / armadilha** — **recusa transparente**, sem inventar número:
+
+```bash
+npm run ask:rag -- "o que diz a Súmula 999 do STF sobre home office?"
+npm run ask:rag -- "qual o artigo da Lei 99.999/2030 sobre criptomoedas?"
+```
+
+- Esperado (C): **não** afirma o dispositivo inexistente nem inventa número/súmula. Diz
+  com transparência o que **não pode** confirmar, oferece **orientação geral** e, se
+  houver, **dispositivos próximos que existem** no acervo, sugerindo conferir na fonte.
+  `Fontes citadas: nenhuma`. Nunca um "não encontrei" seco.
+
+Depois (quando houver chip), a mesma validação A/B/C vale **pelo WhatsApp**.
 
 ## Webhook do WhatsApp (Cloud API)
 
@@ -426,8 +544,9 @@ Nada de mock que finja funcionar — o que não foi implementado está explícit
   `NotImplementedError`**. (Os adapters de `classifier`, `interaction-log`,
   `whatsapp`, `llm` e **`payment` (Asaas)** já são reais.)
 - **Cérebro 2 — validação manual + corpus:** o motor do RAG está pronto (8A); falta
-  **rodar a ingestão** (`npm run ingest:corpus` com `EMBEDDINGS_*`) e validar pelo
-  WhatsApp. **Jurisprudência** abrangente é o **8B** (agregador pago).
+  **rodar a ingestão** (`npm run ingest:corpus`) e **validar** — já dá para validar
+  **sem WhatsApp** pela CLI (`npm run ask:rag -- "..."`, mesmo pipeline do handler);
+  depois pelo WhatsApp. **Jurisprudência** abrangente é o **8B** (agregador pago).
 - **Embeddings:** `EmbeddingsPort` (OpenAI) implementado; precisa de `EMBEDDINGS_*`.
 - **WhatsApp — validação manual e mídia:** o adapter é real, mas o handshake/
   entrega reais com a Meta e o template aprovado exigem **verificação manual**
