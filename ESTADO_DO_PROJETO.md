@@ -6,11 +6,12 @@
 
 ## Fase atual
 
-- **Fase 1 (Núcleo).** Concluído o **Passo 6B — Asaas (sandbox): cobrança, webhook
-  idempotente, máquina de estados**. Falta a **validação manual no sandbox**
-  (criar conta/chaves, configurar o webhook por último, simular pagar→desbloquear)
-  — guia no README. Núcleo da Fase 1 essencialmente completo; próximo: **cérebros**
-  (C1 NL→SQL ou C2 RAG) — onde mora o valor jurídico.
+- **Fase 2 (Inteligência).** Concluído o **Passo 7 — Cérebro 1 (dados do
+  escritório)**: o LLM age via ações tipadas (tool-use) sobre processos e
+  compromissos do próprio usuário, com confirmar-antes-de-gravar e isolamento por
+  tenant. Falta **validar em produção** (cadastrar/listar pelo WhatsApp). Pendente
+  ainda: validação do pagamento no sandbox (6B). Próximo: **Cérebro 2 (RAG
+  jurídico com citação)** ou **Cérebro 3 (tribunais)**.
 
 ## O que já está pronto
 
@@ -64,7 +65,14 @@
   no Asaas antes de ativar; mapa CONFIRMED/RECEIVED→ativa, OVERDUE→inadimplente,
   REFUNDED/DELETED→aguardando_pagamento, desconhecido→ignora. Máquina de estados
   da assinatura; ao ativar, o porteiro do 6A libera. Migração 0016 validada em
-  Postgres 15. **131 testes verdes.**
+  Postgres 15.
+- **Passo 7 — Cérebro 1 (dados do escritório).** LLM age via **ações tipadas**
+  (tool-use): `criar/listar_compromisso`, `cadastrar/listar/consultar_processo`,
+  `ajuda`. **Sem SQL livre** — o código executa queries parametrizadas por tenant.
+  **Confirmar-antes-de-gravar** + slot-filling (`acoes_pendentes`); leitura
+  **ler-depois-formatar** com **anonimização** (Cliente A/Parte A → reidentifica).
+  **Isolamento em 3 camadas** testado com 2 assinantes. Migração 0017 validada em
+  Postgres 15. **147 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -106,6 +114,11 @@
 - **Pagamento (Asaas):** gateway é a fonte da verdade (confirma antes de ativar);
   webhook **autenticado + idempotente**, processa-antes-do-ack; cobrança
   idempotente (não duplica link); nunca armazena cartão.
+- **Cérebro 1 = ações tipadas, não SQL livre:** o LLM escolhe a ação e extrai
+  params (contexto mínimo); o código executa por query parametrizada e escopada.
+  **Confirmar-antes-de-gravar**; **anonimização** ao mandar dados de leitura ao LLM.
+- **Isolamento (3 camadas):** identidade → tenant; schemas sem `assinante_id`;
+  RLS backstop. `acoes_pendentes` por tenant ("sim" só resolve a ação daquele).
 
 ## PENDENTE (explícito)
 
@@ -121,12 +134,13 @@
   (removida do fluxo obrigatório; pode virar opção futura).
 - **WhatsApp:** **download de mídia + Storage** (mídia hoje só placeholder);
   template aprovado na Meta.
-- **LLM:** `embed` (fase RAG) e **nenhuma ferramenta de escrita ligada** ainda
-  (tool use existe no port); anonimização antes de pôr dado de assinante em prompt.
+- **LLM:** `embed` (fase RAG) — PENDENTE. (tool use já em uso no Cérebro 1.)
 - **Fila durável do webhook** (ack rápido + worker) — caminho de escala.
-- Os três cérebros: NL→SQL (C1), RAG jurídico (C2), tribunais (C3). `pgvector`
-  ainda não criado.
-- Captura de `entrada`/`saida` no log (hoje `null`): só após termos anonimização.
+- **Cérebro 2 (RAG jurídico com citação)** e **Cérebro 3 (tribunais)** — C1 já
+  ligado. `pgvector` (corpus do RAG) ainda não criado.
+- **Cérebro 1 — incrementos:** custos/honorários, edição/exclusão de registros,
+  lembretes proativos (scheduler) a partir de `lembrete_em`.
+- Captura de `entrada`/`saida` no log (hoje `null`): só após estender a anonimização.
 - Provisionamento Supabase (projeto, pooler, role sem BYPASSRLS, backups/PITR).
 - **Pruning** das linhas antigas de `whatsapp_mensagens_processadas` e
   `onboarding_estado` abandonados (operação).
@@ -135,11 +149,12 @@
 
 ## Próximos passos previstos
 
-1. **Validar em produção (sandbox):** bloqueio pós-trial → link → pagar →
-   desbloqueio (guia no README) + aprovar templates de cobrança na Meta.
-2. **Cérebros (o valor jurídico):** C1 (NL→SQL — dados do escritório) ou C2
-   (RAG jurídico com citação obrigatória).
-3. Dunning/lembretes de cobrança; mídia→Storage; fila durável do webhook.
+1. **Validar em produção:** Cérebro 1 (cadastrar/listar processo e compromisso,
+   ver confirmação e isolamento) e o pagamento no sandbox (6B).
+2. **Cérebro 2 — RAG jurídico** (citação obrigatória, recusa-sem-fonte; `pgvector`)
+   ou **Cérebro 3 — tribunais** (agregador).
+3. Incrementos do Cérebro 1 (honorários/custos, edição, lembretes proativos);
+   dunning de cobrança; mídia→Storage.
 
 ## Como rodar
 

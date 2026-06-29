@@ -58,14 +58,43 @@ Cada mensagem passa pelo `Orchestrator` (`src/application/orchestrator.ts`):
 5. senão **roteia para UM único handler** (um-cérebro-por-mensagem);
 6. **registra** a interação.
 
-Os handlers ainda são **placeholders honestos** ("🚧 em desenvolvimento") — a
-classificação, o roteamento e o registro são reais e testados. O envio ao
-WhatsApp e os cérebros são passos futuros.
+`consulta_dados` e `agendar` são atendidas pelo **Cérebro 1** (abaixo, quando o LLM
+está configurado); `duvida_juridica` (Cérebro 2/RAG) e `consulta_andamento`
+(Cérebro 3) seguem **placeholders honestos**. Antes de rotear, o **porteiro**
+(trial/pagamento) já decidiu se o usuário tem acesso.
 
 **Log de interação:** grava em `interacoes_log` (via `withTenant`) **só quando há
 tenant**. Interações **pré-tenant** (onboarding/telefone desconhecido) vão só ao
 logger da aplicação, sem persistir e sem dado sensível — a **tabela de auditoria
 pré-tenant será retomada no onboarding** (R-B), para o funil não virar ponto cego.
+
+## Cérebro 1 — dados do escritório (NL → ações)
+
+A primeira vez que o LLM **age** sobre os dados do próprio usuário. Princípio:
+**"painel de botões", não SQL livre** — o LLM escolhe uma **ação** (tool-use) e
+extrai parâmetros; o **código executa** por query parametrizada e tipada.
+
+- **Ações:** `criar_compromisso`, `listar_compromissos`, `cadastrar_processo`,
+  `listar_processos`, `consultar_processo`, `ajuda_assessor` (registro tipado,
+  fácil de expandir — custos/honorários virão depois).
+- **Seleção (1 chamada):** contexto mínimo ao LLM — só a mensagem + o menu de ações
+  + a data/hora atual (para datas relativas). **Nenhuma linha do banco** nessa chamada.
+- **Confirmar antes de gravar:** toda escrita mostra o que será salvo em linguagem
+  natural ("Confirmar: audiência em 2 de julho às 14h — …? Responda *SIM*") e só
+  grava após o "sim" (estado em `acoes_pendentes`, por tenant). Leitura não confirma.
+- **Slot-filling:** se faltar um dado, pergunta **só o que falta** e completa; nunca
+  inventa valor. Pedido fora de escopo → resposta útil (não "não entendi" seco).
+- **Validação:** data válida, CNJ de 20 dígitos, campos obrigatórios → senão pede correção.
+- **Leitura (ler-depois-formatar):** o código roda a query; processos (com nome de
+  cliente/parte) vão ao LLM **anonimizados** ("Cliente A", "Parte A") e a resposta é
+  **reidentificada** localmente. Falha do LLM → formatação em código (sem erro técnico).
+
+### Isolamento entre usuários (três camadas)
+1. `assinante_id` vem **sempre da identidade** (telefone), nunca do texto/params do LLM.
+2. Os **schemas das ações não têm** campo de tenant — o código injeta o `assinante_id`.
+3. **RLS** do Supabase como backstop (`withTenant`/`authenticated`, sem `service_role`).
+A `acoes_pendentes` é por tenant: o "sim" só resolve a ação **daquele** assinante.
+Testado com dois assinantes (A nunca lê/lista/consulta nem confirma ação de B).
 
 ## Webhook do WhatsApp (Cloud API)
 
@@ -331,7 +360,7 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0016)
+## Tabelas (migrações 0001–0017)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`
@@ -343,7 +372,8 @@ e a `0014` as do onboarding (`onboarding_estado`, `onboarding_eventos`) —
 manipuladas só por funções `SECURITY DEFINER`. A `0015` torna OAB/documento
 opcionais e cria a assinatura `trial` (com `trial_fim`) no cadastro. A `0016`
 adiciona a cobrança (`cobranca_url`, `gateway_customer_id`) e a aplicação
-idempotente de eventos do Asaas (`app.apply_asaas_event`).
+idempotente de eventos do Asaas (`app.apply_asaas_event`). A `0017` adiciona
+`compromissos.descricao` e `acoes_pendentes` (confirmar-antes-de-gravar, por tenant).
 
 ## PENDENTE (fora do escopo atual)
 
@@ -356,10 +386,8 @@ Nada de mock que finja funcionar — o que não foi implementado está explícit
 - **Adapters externos** (`src/adapters/{courts,storage}`): **stubs que lançam
   `NotImplementedError`**. (Os adapters de `classifier`, `interaction-log`,
   `whatsapp`, `llm` e **`payment` (Asaas)** já são reais.)
-- **LLM — embeddings e validação real:** `generate` é real (Anthropic/OpenAI);
-  `embed` é **PENDENTE** (fase RAG). Tool use existe no port mas **nenhuma
-  ferramenta de escrita está ligada**. O ciclo real com chave/URL pública é
-  **validação manual** (guia de deploy acima).
+- **LLM — embeddings:** `generate` e **tool use** são reais (o Cérebro 1 já usa
+  function calling); `embed` é **PENDENTE** (fase RAG, Cérebro 2).
 - **WhatsApp — validação manual e mídia:** o adapter é real, mas o handshake/
   entrega reais com a Meta e o template aprovado exigem **verificação manual**
   (passo a passo acima). **Download de mídia + Storage** ficam PENDENTE.
@@ -367,9 +395,12 @@ Nada de mock que finja funcionar — o que não foi implementado está explícit
   durável** permitiria ack cedo com segurança — melhoria futura.
 - **Onboarding — verificação real da OAB:** o cadastro valida o **formato** da OAB
   (número + UF), mas a **conferência da inscrição contra fonte externa** é PENDENTE.
-- **Captura de `entrada`/`saida` no log**: hoje ficam fora; só após anonimização.
-- **Três cérebros**: NL→SQL (C1), RAG jurídico (C2), tribunais (C3) — fases
-  seguintes. `pgvector` (corpus do RAG) ainda não criado.
+- **Anonimização:** implementada e usada nas leituras do Cérebro 1 (mascara nome
+  de cliente/parte; campos estruturais e notas livres não). Captura de
+  `entrada`/`saida` no `interacoes_log` segue fora.
+- **Cérebros 2 e 3**: **C1 (NL→SQL) está ligado** para `consulta_dados`/`agendar`;
+  faltam **C2 (RAG jurídico com citação)** e **C3 (tribunais)** — seguem
+  placeholders. `pgvector` (corpus do RAG) ainda não criado.
 - **Pagamento, lembretes proativos, painel admin** — fases seguintes.
 - **Storage**: buckets privados e políticas por tenant — fase de documentos.
 - **Provisionamento Supabase**: projeto, pooler, role sem `BYPASSRLS`,
