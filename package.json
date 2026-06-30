@@ -20,6 +20,7 @@
     "trial:expire": "tsx scripts/expire-trial.ts",
     "ingest:corpus": "tsx scripts/ingest-corpus.ts",
     "sync:corpus": "tsx scripts/sync-corpus.ts",
+    "send:lembretes": "tsx scripts/send-lembretes.ts",
     "ask:rag": "tsx scripts/ask-rag.ts",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",

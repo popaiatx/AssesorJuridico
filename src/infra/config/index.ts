@@ -61,6 +61,16 @@ const envSchema = z.object({
     .transform((v) => v === 'true'),
   CONVERSA_MEMORIA_TURNOS: z.coerce.number().int().positive().default(6),
   CONVERSA_MEMORIA_TTL_MIN: z.coerce.number().int().positive().default(30),
+
+  // Lembrete proativo (Passo 10). Job separado (Railway Cron); ver README.
+  LEMBRETES_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  // Janela de recuperação (min): dispara lembretes vencidos até `grace` atrás.
+  LEMBRETES_GRACE_MIN: z.coerce.number().int().positive().default(60),
+  // Fuso para EXIBIR a hora no texto do lembrete (a comparação é em UTC).
+  LEMBRETES_TIMEZONE: z.string().default('America/Sao_Paulo'),
 });
 
 export type Config = z.infer<typeof envSchema>;

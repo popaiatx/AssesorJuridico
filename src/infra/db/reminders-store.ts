@@ -45,3 +45,25 @@ export const remindersStore: RemindersStore = {
     return rows[0]?.marcar_lembrete_enviado === true;
   },
 };
+
+// Chave do advisory lock que serializa o job de lembretes (evita rodadas concorrentes).
+const LEMBRETES_LOCK_KEY = 8202;
+
+/** Roda `fn` segurando um advisory lock dedicado; se outra rodada está em
+ *  andamento, NÃO roda e retorna `null` (mesmo padrão do sync do corpus). */
+export async function withLembretesLock<T>(fn: () => Promise<T>): Promise<T | null> {
+  const reserved = await pool.reserve();
+  try {
+    const got = await reserved<{ locked: boolean }[]>`
+      select pg_try_advisory_lock(${LEMBRETES_LOCK_KEY}) as locked
+    `;
+    if (!got[0]?.locked) return null;
+    try {
+      return await fn();
+    } finally {
+      await reserved`select pg_advisory_unlock(${LEMBRETES_LOCK_KEY})`;
+    }
+  } finally {
+    reserved.release();
+  }
+}

@@ -26,3 +26,8 @@ export interface RemindersStore {
   /** Marca como enviado (atômico/idempotente). TRUE = marcou agora; FALSE = já estava. */
   marcarEnviado(compromissoId: string, lembreteEmIso: string): Promise<boolean>;
 }
+
+/** Envio do lembrete (proativo → template aprovado). Abstrai o canal para testar. */
+export interface LembreteSender {
+  enviar(telefone: string, mensagem: string): Promise<void>;
+}

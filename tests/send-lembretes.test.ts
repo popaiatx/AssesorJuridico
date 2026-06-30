@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { sendLembretes, type LembreteSender } from '../src/application/lembretes/send-lembretes';
-import type { DueReminder, RemindersStore } from '../src/core/ports/reminders';
+import { sendLembretes } from '../src/application/lembretes/send-lembretes';
+import type { DueReminder, LembreteSender, RemindersStore } from '../src/core/ports/reminders';
 
 const TZ = 'America/Sao_Paulo';
 const NOW = new Date('2026-06-30T18:00:00.000Z');

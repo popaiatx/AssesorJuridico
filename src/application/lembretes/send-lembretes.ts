@@ -8,18 +8,13 @@
  * FIELMENTE: mesma seleção e composição, sem enviar e SEM marcar.
  */
 import { montarMensagemLembrete } from '../../core/domain/lembretes/format.js';
-import type { RemindersStore } from '../../core/ports/reminders.js';
+import type { LembreteSender, RemindersStore } from '../../core/ports/reminders.js';
 
 interface Logger {
   info(obj: Record<string, unknown>, msg?: string): void;
   error(obj: Record<string, unknown>, msg?: string): void;
 }
 const noopLogger: Logger = { info: () => {}, error: () => {} };
-
-/** Envio do lembrete (proativo → template). Abstrai o WhatsApp para testar. */
-export interface LembreteSender {
-  enviar(telefone: string, mensagem: string): Promise<void>;
-}
 
 export interface SendLembretesDeps {
   store: RemindersStore;

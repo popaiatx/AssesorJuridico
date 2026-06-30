@@ -331,6 +331,45 @@ npm run ask:rag -- "qual o artigo da Lei 99.999/2030 sobre criptomoedas?"
 
 Depois (quando houver chip), a mesma validação A/B/C vale **pelo WhatsApp**.
 
+## Lembrete proativo (Passo 10)
+
+Um **job agendado** avisa o advogado **antes** de audiências/prazos. Os instantes
+(24h e 1h antes) já são gravados pelo Cérebro 1 em `compromissos.lembrete_em`; este
+job faz o **disparo**.
+
+- **Job separado** (Railway Cron a cada **15 min**): `npm run send:lembretes`. Schedule
+  sugerido: `*/15 * * * *`. Liga/desliga por `LEMBRETES_ENABLED`.
+- **Seleção** (`app.lembretes_due`, SECURITY DEFINER, sem `service_role`): pega os
+  devidos na janela **[agora − `LEMBRETES_GRACE_MIN`, agora]**, **ignorando** futuros,
+  compromissos **já passados** e os **já enviados**.
+- **Idempotência:** marca como enviado **só após sucesso** (`app.marcar_lembrete_enviado`,
+  `unique (compromisso_id, lembrete_em)`); falha no envio **não marca** → re-tenta. Rodar
+  duas vezes = **1 envio**. Advisory lock serializa as rodadas.
+- **Fuso:** comparação em **UTC**; o texto exibe a hora em **`LEMBRETES_TIMEZONE`**
+  (BRT) — "amanhã às 14:00".
+- **Proativo → TEMPLATE:** envia pelo `lembrete_generico`. **A aprovação do template na
+  Meta e o envio real pelo WhatsApp são validação manual PENDENTE (dependem do chip);**
+  o código já está pronto para o template.
+- **Resiliência:** falha de um lembrete não aborta os outros nem o marca.
+
+### Dry-run (validar a lógica SEM chip)
+
+Roda **a mesma seleção e composição** do envio real, só que **não envia e NÃO marca**
+nada (pode rodar quantas vezes quiser) e **lista** o que enviaria. Precisa só de
+`SUPABASE_*` + `DATABASE_URL` (não precisa de WhatsApp):
+
+```bash
+# o que seria enviado AGORA
+npm run send:lembretes -- --dry-run
+
+# simulando um "agora" (ex.: como se já fossem 16:05 UTC de 01/07) — para testar a
+# seleção sem esperar o horário real chegar
+npm run send:lembretes -- --dry-run --now "2026-07-01T16:05:00Z"
+```
+
+Saída: para cada lembrete devido, **para quem** iria, **qual compromisso**, **o
+horário de disparo** e o **texto final** (em horário de Brasília).
+
 ## Webhook do WhatsApp (Cloud API)
 
 Entrada real do produto. Só é registrado se as `WHATSAPP_*` estiverem
@@ -595,7 +634,7 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0020)
+## Tabelas (migrações 0001–0021)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`
@@ -614,7 +653,10 @@ pgvector + HNSW), com leitura pública e sem tenant. A `0019` adiciona os **meta
 de sincronização** (`fonte_hash`, `fonte_versao`, `ultima_sincronizacao`,
 `revogada_em`) e a auditoria `corpus_sync_runs` (back-office, RLS sem leitura pública).
 A `0020` cria `conversa_memoria` (memória de conversa **por tenant**, RLS force) —
-janela curta com só intenção + citações públicas; nunca é fonte jurídica.
+janela curta com só intenção + citações públicas; nunca é fonte jurídica. A `0021`
+cria `lembretes_enviados` (idempotência do lembrete proativo, RLS force) + as funções
+SECURITY DEFINER `app.lembretes_due` (seleção dos devidos) e
+`app.marcar_lembrete_enviado` (marcação atômica).
 
 ## PENDENTE (fora do escopo atual)
 

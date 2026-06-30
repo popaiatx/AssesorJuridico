@@ -17,10 +17,13 @@
   Corpus carregado e validado pela CLI. Concluído também o **Passo 9 — Memória de
   conversa**: o assessor mantém o fio do assunto entre mensagens (resolve "dela"/"o
   artigo seguinte") e percebe mudança de assunto, **sem a memória virar fonte** e sem
-  afrouxar isolamento/antialucinação. Falta **agendar o Railway Cron** (sync semanal)
-  e **validar pelo WhatsApp** (depende do chip).
-  Próximo: **lembrete proativo** (job agendado), depois **jurisprudência** (agregador
-  pago) ou **Cérebro 3 (tribunais)**.
+  afrouxar isolamento/antialucinação. Concluído também o **Passo 10 — Lembrete
+  proativo**: job agendado (Railway Cron) que avisa o advogado antes de
+  audiências/prazos, idempotente, no fuso de Brasília, via template — validável por
+  **dry-run** sem chip. Falta **agendar os Crons no Railway** (sync semanal + lembretes
+  15 min), **aprovar o template `lembrete_generico` na Meta** e **validar pelo WhatsApp**
+  (tudo depende do chip).
+  Próximo: **jurisprudência** (agregador pago) ou **Cérebro 3 (tribunais)**.
   Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B) — pelo chip.
 
 ## O que já está pronto
@@ -123,6 +126,15 @@
   segue validada contra o corpus; sem fonte, recusa (validado: "artigo seguinte" sem
   texto no acervo → recusa, não inventa). Modo `ask:rag -- --conversa` para validar
   sem chip. **207 testes verdes.**
+- **Passo 10 — Lembrete proativo.** Job agendado (`npm run send:lembretes`, Railway
+  Cron 15 min, processo separado) que avisa o advogado **antes** de audiências/prazos.
+  Os instantes (24h e 1h antes) já vêm do Cérebro 1 (`compromissos.lembrete_em`).
+  Migração 0021: `lembretes_enviados` (RLS force) + funções SECURITY DEFINER
+  `app.lembretes_due` (seleção dos devidos na janela `[agora-grace, agora]`, ignora
+  futuros/passados/já enviados) e `app.marcar_lembrete_enviado` (atômica, idempotente).
+  Motor `send-lembretes` (marca-após-sucesso; resiliência por lembrete; advisory lock);
+  `format.ts` (texto + fuso BR). **Dry-run fiel** (`--dry-run [--now ISO]`) que NÃO
+  envia nem marca. Envio proativo via template `lembrete_generico`. **217 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -183,6 +195,10 @@
   consulta; afirmação jurídica segue do corpus com citação validada. Guarda só
   intenção + citações públicas (sem PII), por tenant (RLS), janela + TTL. Heurística
   **falha p/ novo foco** (na dúvida, não injeta) e a mensagem atual domina a busca.
+- **Lembrete proativo = job back-office idempotente:** seleção cross-tenant por
+  SECURITY DEFINER (sem service_role), **marca-após-sucesso** + `unique` + advisory
+  lock (rodar 2x = 1 envio). Compara em **UTC**, exibe em **BRT**; não dispara passado;
+  grace recupera downtime. Proativo → **template** (envio real depende de aprovação).
 
 ## PENDENTE (explícito)
 
@@ -201,9 +217,10 @@
   "reescrever para pergunta autônoma" se a resolução por embedding se mostrar ambígua
   (ex.: "o artigo seguinte" hoje é resolvido como referência, mas a recuperação do
   artigo exato é fraca → recusa em vez de inventar).
-- **Lembrete proativo — NÃO envia ainda:** o Cérebro 1 já grava `compromissos.lembrete_em`
-  e existe o template `lembrete_generico`, mas falta o **job agendado** que lê os
-  vencimentos e dispara (nos moldes do sync do corpus, respeitando janela 24h/template).
+- **Lembrete proativo — FEITO (Passo 10), validável por dry-run.** PENDENTE (chip):
+  **aprovar o template `lembrete_generico` na Meta**, **agendar o Railway Cron** (15 min)
+  e **validar o envio real** pelo WhatsApp. O código já usa o template; só o envio real
+  espera o chip + aprovação.
 - **Jurisprudência — agregador pago:** plugar adapter real no `SourcePort` (stub
   pronto), respeitando os termos de uso; usa a MESMA sincronização. Ampliar o
   manifesto de legislação conforme necessário.
@@ -225,12 +242,13 @@
 
 ## Próximos passos previstos
 
-1. **Lembrete proativo** (próximo passo combinado): job agendado que lê
-   `compromissos.lembrete_em` e dispara pelo template, respeitando janela 24h.
-2. **Agendar o Railway Cron** (sync semanal do corpus) e **validar pelo WhatsApp**
-   (memória, C1, RAG) quando houver chip; pagamento sandbox (6B).
-3. **Jurisprudência — agregador pago** no `SourcePort` (mesma sync), ou **Cérebro 3
-   (tribunais)**; incrementos do Cérebro 1; dunning de cobrança; mídia→Storage.
+1. **Agendar os Railway Crons** (sync do corpus semanal + lembretes a cada 15 min),
+   **aprovar o template `lembrete_generico` na Meta** e **validar pelo WhatsApp**
+   (memória, C1, RAG, lembrete) quando houver chip; pagamento sandbox (6B).
+2. **Jurisprudência — agregador pago** no `SourcePort` (mesma sync), ou **Cérebro 3
+   (tribunais)**.
+3. Incrementos do Cérebro 1 (honorários/custos, edição); dunning de cobrança;
+   mídia→Storage.
 
 ## Como rodar
 

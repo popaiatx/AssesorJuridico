@@ -41,6 +41,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | **Cérebro 1 — dados do escritório** | Linguagem natural → ação tipada (processos/compromissos) por query escopada ao tenant; confirma antes de gravar. |
 | **Cérebro 2 — RAG jurídico + sync** | Responde dúvidas jurídicas só com fonte recuperada do corpus (citação validada); corpus local mantido fresco por sincronização. |
 | **Memória de conversa** | Mantém o fio do assunto entre mensagens (resolve "dela", "o artigo seguinte") só para interpretar; nunca é fonte; por tenant, com janela e expiração. |
+| **Lembrete proativo** | Job agendado avisa o advogado antes de audiências/prazos (24h e 1h antes), idempotente, no fuso de Brasília, via template aprovado. |
 
 ---
 
@@ -93,6 +94,13 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Testar — automatizado:** `tests/conversation-memory.test.ts` (janela/TTL/isolamento/privacidade), `tests/follow-up.test.ts` (continuidade vs mudança de assunto, adversarial), `tests/llm-classifier.test.ts`, `tests/cerebro2-handler.test.ts` (consulta combinada).
 - **Testar — manual SEM chip (CLI):** `npm run ask:rag -- --conversa "p1" "p2"` (continuidade e mudança de assunto). **Não depende do chip.**
 
+### 8. Lembrete proativo
+- **Faz:** job agendado (Railway Cron, 15 min) seleciona compromissos com lembrete vencendo (24h e 1h antes) e **avisa o dono** pelo WhatsApp. Idempotente (marca após sucesso; rodar 2x = 1 envio), resiliente por lembrete, fuso de Brasília na exibição. Mensagem PROATIVA → **template** `lembrete_generico`.
+- **Arquivos:** `src/application/lembretes/send-lembretes.ts` (motor), `src/core/domain/lembretes/format.ts` (texto+fuso), `src/core/ports/reminders.ts` + `src/infra/db/reminders-store.ts` (`app.lembretes_due`/`app.marcar_lembrete_enviado`), `src/adapters/whatsapp/lembrete-sender.ts`, `scripts/send-lembretes.ts`, migração `0021`.
+- **Config (.env):** `LEMBRETES_ENABLED=true`, `LEMBRETES_GRACE_MIN=60`, `LEMBRETES_TIMEZONE=America/Sao_Paulo`.
+- **Testar — automatizado:** `tests/send-lembretes.test.ts` (envia+marca, idempotência, resiliência, dry-run), `tests/lembrete-format.test.ts` (fuso/texto), seleção SQL validada em Postgres.
+- **Testar — manual SEM chip (CLI):** `npm run send:lembretes -- --dry-run` (e `--now "<ISO>"` para simular o horário). Lista o que enviaria, sem enviar/marcar. **Envio real e aprovação do template na Meta = PENDENTE (depende do chip).**
+
 ---
 
 ## Comandos úteis (scripts npm)
@@ -108,6 +116,8 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | `npm run sync:corpus` | **Sincronização incremental** (só o que mudou); `-- --norma "…"` (uma) / `-- --force` (tudo). | Manutenção; é o que o Railway Cron roda semanalmente. |
 | `npm run ask:rag -- "pergunta"` | Valida o RAG pela CLI (mesmo pipeline do handler). Usa LLM + embeddings. | Validar o Cérebro 2 **sem WhatsApp**. |
 | `npm run ask:rag -- --conversa "p1" "p2"` | Roda perguntas em sequência com **memória** ativa (continuidade e mudança de assunto). | Validar a **memória de conversa** sem chip. |
+| `npm run send:lembretes -- --dry-run [--now "<ISO>"]` | Lista os lembretes que enviaria (sem enviar/marcar); `--now` simula o horário. | Validar a lógica do **lembrete** sem chip. |
+| `npm run send:lembretes` | Envia os lembretes devidos (real; precisa WHATSAPP_* + template aprovado). | É o que o Railway Cron roda a cada 15 min. |
 | `npm run seed:assinante -- <tel>` | Cria/atualiza um assinante de teste (admin). | Destravar testes sem onboarding. |
 | `npm run reset:assinante -- <tel>` | Remove o assinante (cascata) + limpa onboarding. | Refazer o fluxo de número novo. |
 | `npm run trial:expire -- <tel>` | Vence o trial (coloca `trial_fim` no passado). | Testar o bloqueio pós-trial. |
@@ -131,7 +141,9 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | Cérebro 2 — motor RAG + sync | ✅ | ✅ corpus carregado; validado pela CLI | **Não** — valida pela CLI `ask:rag` |
 | Cérebro 2 — resposta pelo WhatsApp | ✅ (handler) | ❌ ainda não | **Sim** |
 | Memória de conversa | ✅ | ✅ validada pela CLI (`--conversa`) | **Não** — valida pela CLI |
-| Migrações 0019 (sync) / 0020 (memória) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |
+| Lembrete proativo — lógica/seleção/idempotência | ✅ | ✅ validável por `--dry-run` | **Não** — valida em dry-run |
+| Lembrete proativo — envio real + template Meta | ✅ (código) | ❌ PENDENTE | **Sim** (chip + aprovação) |
+| Migrações 0019 (sync) / 0020 (memória) / 0021 (lembrete) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |
 
 **Resumo do que dá para validar JÁ, sem chip:** (1) **Cérebro 2** ponta a ponta pela
 CLI (`ingest:corpus` → `ask:rag` com A/B/C); (2) **pagamento Asaas no sandbox**
