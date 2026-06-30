@@ -76,6 +76,10 @@ const envSchema = z.object({
   DOCUMENTOS_BUCKET: z.string().default('documentos'),
   DOCUMENTOS_URL_TTL_SEC: z.coerce.number().int().positive().default(300),
   DOCUMENTOS_MAX_MB: z.coerce.number().int().positive().default(20),
+  // Busca de documentos (Passo 12B): quantos resultados (exata+semântica) devolver.
+  DOCUMENTOS_BUSCA_TOPN: z.coerce.number().int().positive().default(5),
+  // Piso de similaridade da busca semântica de documentos (vizinho irrelevante fora).
+  DOCUMENTOS_BUSCA_MIN_SIM: z.coerce.number().min(0).max(1).default(0.3),
 });
 
 export type Config = z.infer<typeof envSchema>;
