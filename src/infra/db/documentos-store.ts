@@ -3,14 +3,20 @@
  * sem service_role). O service_role só toca o ARQUIVO no Storage; "de quem é o
  * documento" é decidido AQUI (RLS). O `assinante_id` vem sempre da identidade.
  */
+import { pool } from './pool.js';
 import { withTenant } from './tenant.js';
 import type {
   ConteudoExtraido,
+  DocumentoResultado,
   DocumentoRow,
   ExtracaoStatus,
   KeyInfo,
   NovoDocumento,
 } from '../../core/ports/documentos.js';
+
+function vectorLiteral(embedding: number[]): string {
+  return `[${embedding.join(',')}]`;
+}
 
 interface DbDoc {
   id: string;
@@ -62,6 +68,7 @@ export async function gravarConteudoDocumento(
         resumo = ${c.resumo},
         extracao_status = ${c.extracaoStatus},
         busca_texto = ${c.buscaTexto},
+        embedding = ${c.embedding === null ? null : vectorLiteral(c.embedding)}::vector,
         status = 'guardado'
       where id = ${id} and assinante_id = ${assinanteId}
       returning id
@@ -105,4 +112,91 @@ export async function removerDocumento(assinanteId: string, id: string): Promise
     `;
     return rows[0]?.storage_ref ?? null;
   });
+}
+
+// --- Passo 12B: busca (SEMPRE escopada por tenant na própria query; RLS backstop) ---
+
+/** Exata: casa QUALQUER token (palavra/fragmento de número) em busca_texto/nome,
+ *  ranqueado pelo nº de tokens que casaram. Tudo do PRÓPRIO tenant. */
+export async function buscarDocumentosExato(
+  assinanteId: string,
+  termos: string[],
+  limite: number,
+): Promise<DocumentoResultado[]> {
+  if (termos.length === 0) return [];
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<DbDoc[]>`
+      select id, nome, tipo, storage_ref, processo_id, chaves, resumo, extracao_status, status
+      from documentos d
+      where d.assinante_id = ${assinanteId}
+        and d.status = 'guardado'
+        and exists (
+          select 1 from unnest(${termos}::text[]) tk
+          where d.busca_texto ilike '%' || tk || '%' or d.nome ilike '%' || tk || '%'
+        )
+      order by (
+        select count(*) from unnest(${termos}::text[]) tk
+        where d.busca_texto ilike '%' || tk || '%' or d.nome ilike '%' || tk || '%'
+      ) desc, d.enviado_em desc
+      limit ${limite}
+    `;
+    return rows.map(toRow);
+  });
+}
+
+/** Semântica: vizinhos do embedding ENTRE os documentos do próprio tenant. */
+export async function buscarDocumentosSemantico(
+  assinanteId: string,
+  embedding: number[],
+  limite: number,
+): Promise<DocumentoResultado[]> {
+  const vec = vectorLiteral(embedding);
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<(DbDoc & { similarity: number })[]>`
+      select id, nome, tipo, storage_ref, processo_id, chaves, resumo, extracao_status, status,
+             1 - (embedding <=> ${vec}::vector) as similarity
+      from documentos
+      where assinante_id = ${assinanteId}
+        and status = 'guardado'
+        and embedding is not null
+      order by embedding <=> ${vec}::vector
+      limit ${limite}
+    `;
+    return rows.map((r) => ({ ...toRow(r), similarity: Number(r.similarity) }));
+  });
+}
+
+/** Quantos documentos do tenant ficaram SEM texto (ponto cego da busca). */
+export async function contarDocumentosSemTexto(assinanteId: string): Promise<number> {
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<{ n: number }[]>`
+      select count(*)::int as n from documentos
+      where assinante_id = ${assinanteId} and status = 'guardado' and extracao_status = 'sem_texto'
+    `;
+    return rows[0]?.n ?? 0;
+  });
+}
+
+// --- Backfill de embeddings (BACK-OFFICE / CLI; via pool, fora do caminho de mensagem) ---
+
+export interface DocSemEmbedding {
+  id: string;
+  assinanteId: string;
+  buscaTexto: string;
+}
+
+/** Documentos com texto (ok) e busca_texto, mas SEM embedding ainda (idempotente). */
+export async function listarDocumentosSemEmbedding(limite: number): Promise<DocSemEmbedding[]> {
+  const rows = await pool<{ id: string; assinante_id: string; busca_texto: string }[]>`
+    select id, assinante_id, busca_texto from documentos
+    where embedding is null and extracao_status = 'ok'
+      and busca_texto is not null and status = 'guardado'
+    limit ${limite}
+  `;
+  return rows.map((r) => ({ id: r.id, assinanteId: r.assinante_id, buscaTexto: r.busca_texto }));
+}
+
+/** Grava o embedding de um documento (back-office). */
+export async function setDocumentoEmbedding(id: string, embedding: number[]): Promise<void> {
+  await pool`update documentos set embedding = ${vectorLiteral(embedding)}::vector where id = ${id}`;
 }

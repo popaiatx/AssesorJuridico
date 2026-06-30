@@ -169,6 +169,7 @@ export class DocumentoService {
         resumo: null,
         extracaoStatus: ex.status,
         buscaTexto: null,
+        embedding: null, // sem texto → sem embedding (achável só por nome/data)
       });
       return `📎 Guardei o arquivo${avisoProc}. ${ex.aviso ?? ''} ${AVISO.guardadoSemTexto}`.trim();
     }
@@ -179,6 +180,7 @@ export class DocumentoService {
       resumo,
       extracaoStatus: 'ok',
       buscaTexto: buscaTextoDe(chaves),
+      embedding: null, // Commit 2 (12B): embedding-on-write a partir do busca_texto
     });
     const tipo = chaves.tipo ? ` (${chaves.tipo})` : '';
     const guardei = `📎 Guardei no seu acervo${tipo}${avisoProc}.`;

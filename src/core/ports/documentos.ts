@@ -36,6 +36,8 @@ export interface ConteudoExtraido {
   resumo: string | null;
   extracaoStatus: ExtracaoStatus;
   buscaTexto: string | null;
+  /** Embedding semântico (do busca_texto). Null quando sem texto (escaneado). */
+  embedding: number[] | null;
 }
 
 export interface DocumentoRow {
@@ -48,6 +50,29 @@ export interface DocumentoRow {
   resumo: string | null;
   extracaoStatus: ExtracaoStatus;
   status: string;
+}
+
+/** Resultado de busca: o documento + (no semântico) a similaridade. */
+export interface DocumentoResultado extends DocumentoRow {
+  similarity?: number;
+}
+
+/**
+ * Busca de documentos (Passo 12B) — SEMPRE escopada por tenant na própria query
+ * (o `assinanteId` vem da identidade, nunca do usuário/LLM). RLS é o backstop.
+ */
+export interface DocumentoSearchStore {
+  /** Exata: ILIKE de cada token em busca_texto/nome (casa fragmento de número),
+   *  ranqueado pelo nº de tokens que casaram. Por tenant. */
+  buscarExato(assinanteId: string, termos: string[], limite: number): Promise<DocumentoResultado[]>;
+  /** Semântica: vizinhos do embedding ENTRE os documentos do próprio tenant. */
+  buscarSemantico(
+    assinanteId: string,
+    embedding: number[],
+    limite: number,
+  ): Promise<DocumentoResultado[]>;
+  /** Quantos documentos do tenant ficaram sem texto (ponto cego da busca). */
+  contarSemTexto(assinanteId: string): Promise<number>;
 }
 
 export interface DocumentoStore {
