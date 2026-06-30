@@ -253,6 +253,25 @@ em `src/adapters/source/legislacao/manifest.ts` (`sigla`, `titulo`, `identificad
 único, `fonteUrl` oficial, `dataPublicacao`) e rode `npm run sync:corpus` — as já
 presentes são puladas (hash igual) e **só a nova entra**.
 
+## Memória de conversa (Passo 9)
+
+O assessor mantém o **fio do assunto** entre mensagens: resolve referências como
+*"e o prazo dela?"* ou *"e o artigo seguinte?"* e percebe quando o usuário **muda de
+assunto**. Princípios:
+
+- **A memória interpreta, NUNCA é fonte.** Ela só ajuda a montar a consulta; a
+  resposta jurídica continua vindo do corpus, com **citação validada** — sem fonte,
+  recusa. (Demonstrado: ao pedir "o artigo seguinte" sem o texto no acervo, o sistema
+  **recusa** em vez de inventar.)
+- **Privacidade por construção:** guarda só **intenção + citações públicas** (ex.:
+  `art. 335 do CPC`) por assinante — **nenhum texto livre do usuário**, logo sem PII.
+- **Isolamento por tenant** (RLS force), **janela curta** (`CONVERSA_MEMORIA_TURNOS`,
+  6) e **expiração por silêncio** (`CONVERSA_MEMORIA_TTL_MIN`, 30 min). Liga/desliga
+  por `CONVERSA_MEMORIA_ENABLED`.
+- **Heurística que falha para o lado seguro:** só injeta contexto quando a mensagem é
+  follow-up curto/anafórico **sem** norma própria; se nomeia outra lei (ex.: *"e na
+  CLT…"*), trata como **novo foco** — nunca contamina com o assunto anterior.
+
 ### Validar o RAG pela CLI (sem WhatsApp)
 
 `scripts/ask-rag.ts` roda **exatamente o mesmo pipeline** do `Cerebro2Handler` (não é
@@ -261,7 +280,12 @@ recuperar → gerar → validar citação → recusar — e imprime a resposta +
 validadas**. Precisa de `LLM_*`, `EMBEDDINGS_*` e `DATABASE_URL`:
 
 ```bash
+# pergunta isolada (sem memória)
 npm run ask:rag -- "qual o prazo de contestação no CPC?"
+
+# modo conversa (testa a MEMÓRIA — continuidade e mudança de assunto)
+npm run ask:rag -- --conversa "qual o prazo de contestação no CPC?" "e o artigo seguinte?"
+npm run ask:rag -- --conversa "qual o prazo de contestação no CPC?" "e na CLT, qual a duração das férias?"
 ```
 
 #### Roteiro de validação manual (após a ingestão)
@@ -571,7 +595,7 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0019)
+## Tabelas (migrações 0001–0020)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`
@@ -589,6 +613,8 @@ A `0018` cria o **corpus compartilhado** do RAG (`corpus_normas`/`corpus_trechos
 pgvector + HNSW), com leitura pública e sem tenant. A `0019` adiciona os **metadados
 de sincronização** (`fonte_hash`, `fonte_versao`, `ultima_sincronizacao`,
 `revogada_em`) e a auditoria `corpus_sync_runs` (back-office, RLS sem leitura pública).
+A `0020` cria `conversa_memoria` (memória de conversa **por tenant**, RLS force) —
+janela curta com só intenção + citações públicas; nunca é fonte jurídica.
 
 ## PENDENTE (fora do escopo atual)
 

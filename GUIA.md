@@ -40,6 +40,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | **Pagamento (Asaas)** | Gera cobrança, recebe webhook autenticado e idempotente, ativa o acesso só após confirmação no gateway. |
 | **Cérebro 1 — dados do escritório** | Linguagem natural → ação tipada (processos/compromissos) por query escopada ao tenant; confirma antes de gravar. |
 | **Cérebro 2 — RAG jurídico + sync** | Responde dúvidas jurídicas só com fonte recuperada do corpus (citação validada); corpus local mantido fresco por sincronização. |
+| **Memória de conversa** | Mantém o fio do assunto entre mensagens (resolve "dela", "o artigo seguinte") só para interpretar; nunca é fonte; por tenant, com janela e expiração. |
 
 ---
 
@@ -85,6 +86,13 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Testar — automatizado:** `tests/rag.test.ts` (A/B/C + antialucinação + revogada fora do allowlist), `tests/cerebro2-handler.test.ts`, `tests/sync-corpus.test.ts` (idempotência, alteração, revogação, resiliência), `tests/source-planalto.test.ts`, `tests/revogacao.test.ts`, `tests/embeddings.test.ts`.
 - **Testar — manual SEM chip (CLI):** carregue o corpus e use `npm run ask:rag -- "..."` (mesmo pipeline do handler). Roteiro A/B/C completo no README. **Não depende do chip.**
 
+### 7. Memória de conversa
+- **Faz:** mantém o fio do assunto entre mensagens (resolve "dela", "o artigo seguinte") e percebe mudança de assunto. **Só interpreta — nunca é fonte** (a citação segue validada contra o corpus; sem fonte, recusa). Guarda só intenção + citações públicas por assinante (sem PII); janela curta + expiração por TTL; isolada por tenant (RLS force).
+- **Arquivos:** `src/core/domain/conversation/memory.ts` (política pura), `src/core/domain/cerebro2/follow-up.ts` (heurística), `src/infra/db/conversation-memory-store.ts` + `src/core/ports/conversation-memory.ts`, uso no `orchestrator.ts`/`llm-classifier.ts`/`cerebro2-handler.ts`, migração `0020`.
+- **Config (.env):** `CONVERSA_MEMORIA_ENABLED=true`, `CONVERSA_MEMORIA_TURNOS=6`, `CONVERSA_MEMORIA_TTL_MIN=30`.
+- **Testar — automatizado:** `tests/conversation-memory.test.ts` (janela/TTL/isolamento/privacidade), `tests/follow-up.test.ts` (continuidade vs mudança de assunto, adversarial), `tests/llm-classifier.test.ts`, `tests/cerebro2-handler.test.ts` (consulta combinada).
+- **Testar — manual SEM chip (CLI):** `npm run ask:rag -- --conversa "p1" "p2"` (continuidade e mudança de assunto). **Não depende do chip.**
+
 ---
 
 ## Comandos úteis (scripts npm)
@@ -99,6 +107,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | `npm run ingest:corpus` | **Carga inicial** do corpus (sync com `--force`: reconstrói tudo). Não usa LLM. | Primeira carga ou reconstrução total. |
 | `npm run sync:corpus` | **Sincronização incremental** (só o que mudou); `-- --norma "…"` (uma) / `-- --force` (tudo). | Manutenção; é o que o Railway Cron roda semanalmente. |
 | `npm run ask:rag -- "pergunta"` | Valida o RAG pela CLI (mesmo pipeline do handler). Usa LLM + embeddings. | Validar o Cérebro 2 **sem WhatsApp**. |
+| `npm run ask:rag -- --conversa "p1" "p2"` | Roda perguntas em sequência com **memória** ativa (continuidade e mudança de assunto). | Validar a **memória de conversa** sem chip. |
 | `npm run seed:assinante -- <tel>` | Cria/atualiza um assinante de teste (admin). | Destravar testes sem onboarding. |
 | `npm run reset:assinante -- <tel>` | Remove o assinante (cascata) + limpa onboarding. | Refazer o fluxo de número novo. |
 | `npm run trial:expire -- <tel>` | Vence o trial (coloca `trial_fim` no passado). | Testar o bloqueio pós-trial. |
@@ -119,9 +128,10 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | Onboarding + trial + porteiro | ✅ | ❌ ainda não | **Sim** (fluxo real é pelo WhatsApp) |
 | Pagamento Asaas | ✅ | ❌ falta sandbox | **Não** (ciclo pode rodar no sandbox); aviso proativo sim |
 | Cérebro 1 (dados do escritório) | ✅ | ❌ ainda não | **Sim** (uso real é pelo WhatsApp) |
-| Cérebro 2 — motor RAG + sync | ✅ | ❌ falta rodar ingestão + validar | **Não** — valida pela CLI `ask:rag` |
+| Cérebro 2 — motor RAG + sync | ✅ | ✅ corpus carregado; validado pela CLI | **Não** — valida pela CLI `ask:rag` |
 | Cérebro 2 — resposta pelo WhatsApp | ✅ (handler) | ❌ ainda não | **Sim** |
-| Migração 0019 (sync) | ✅ (Docker pgvector) | ⚠️ aplicar com `db push` | Não |
+| Memória de conversa | ✅ | ✅ validada pela CLI (`--conversa`) | **Não** — valida pela CLI |
+| Migrações 0019 (sync) / 0020 (memória) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |
 
 **Resumo do que dá para validar JÁ, sem chip:** (1) **Cérebro 2** ponta a ponta pela
 CLI (`ingest:corpus` → `ask:rag` com A/B/C); (2) **pagamento Asaas no sandbox**

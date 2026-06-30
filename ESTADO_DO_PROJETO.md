@@ -14,10 +14,14 @@
   LOCAL (Supabase+pgvector) que se mantém fresco por job de sync com a fonte oficial
   (Planalto), detectando novo/alterado/revogado, re-embedando só o que muda, com
   vigência na busca (revogada nunca afirma) — tudo sem afrouxar o antialucinação.
-  Falta **rodar a ingestão/sync** (`npm run ingest:corpus` / `sync:corpus`),
-  **agendar o Railway Cron** (semanal) e **validar** (CLI `ask:rag` e/ou WhatsApp).
-  Próximo: **jurisprudência** (agregador pago, mesma sync) ou **Cérebro 3 (tribunais)**.
-  Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B), RAG.
+  Corpus carregado e validado pela CLI. Concluído também o **Passo 9 — Memória de
+  conversa**: o assessor mantém o fio do assunto entre mensagens (resolve "dela"/"o
+  artigo seguinte") e percebe mudança de assunto, **sem a memória virar fonte** e sem
+  afrouxar isolamento/antialucinação. Falta **agendar o Railway Cron** (sync semanal)
+  e **validar pelo WhatsApp** (depende do chip).
+  Próximo: **lembrete proativo** (job agendado), depois **jurisprudência** (agregador
+  pago) ou **Cérebro 3 (tribunais)**.
+  Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B) — pelo chip.
 
 ## O que já está pronto
 
@@ -107,7 +111,18 @@
   de tokens; RAG robusto a JSON truncado (degrada com segurança); **`RAG_TOP_K`
   ajustável (default 8)**. **Corpus REAL carregado: 6 normas, todos os trechos com
   embedding** (CF, CC, CPC, CLT, CDC, 8.213). Bateria A/B/C validada pela CLI.
-  **190 testes verdes.**
+- **Passo 9 — Memória de conversa.** Estado curto **por tenant** (`conversa_memoria`,
+  RLS force, migração 0020) com **só intenção + citações públicas** (sem PII; nunca
+  texto livre do usuário). Política pura (`isWarm`/`trimTurnos`); janela
+  `CONVERSA_MEMORIA_TURNOS`=6, TTL `CONVERSA_MEMORIA_TTL_MIN`=30, flag
+  `CONVERSA_MEMORIA_ENABLED`. O orquestrador carrega a cauda quente → passa como
+  `recentContext` (opcional) ao classificador e ao Cérebro 2 → anexa o turno após
+  responder; memória fria (TTL) é limpa. **Heurística conservadora** (`follow-up.ts`):
+  só injeta contexto em follow-up curto/anafórico SEM norma própria; senão, novo foco
+  (adversarial "e na CLT…" não contamina). A memória **só interpreta** — a citação
+  segue validada contra o corpus; sem fonte, recusa (validado: "artigo seguinte" sem
+  texto no acervo → recusa, não inventa). Modo `ask:rag -- --conversa` para validar
+  sem chip. **207 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -164,6 +179,10 @@
   futuro (spike provou que não entrega vigência/harvest estáveis hoje). Mudança por
   **hash**, revogação **defensiva e sticky**, **resiliência por norma**; revogada
   nunca é citada como vigente. Sync é **back-office** (pool, sem service_role).
+- **Memória de conversa interpreta, não é fonte:** resolve referências p/ montar a
+  consulta; afirmação jurídica segue do corpus com citação validada. Guarda só
+  intenção + citações públicas (sem PII), por tenant (RLS), janela + TTL. Heurística
+  **falha p/ novo foco** (na dúvida, não injeta) e a mensagem atual domina a busca.
 
 ## PENDENTE (explícito)
 
@@ -177,9 +196,11 @@
 - **Cérebro 2 — corpus carregado e validado pela CLI (feito); falta:** **agendar o
   Railway Cron semanal** e **validar pelo WhatsApp** (depende do chip). Carga/sync via
   `npm run ingest:corpus`/`sync:corpus`; confirmar via `corpus_sync_runs`/`corpus_normas`.
-- **Memória de conversa — NÃO existe** (cada mensagem é tratada isolada; só há o slot
-  de ação pendente do Cérebro 1 p/ confirmar-antes-de-gravar). A construir: memória
-  conversacional por usuário (contexto entre mensagens; detectar troca de assunto).
+- **Memória de conversa — FEITA (Passo 9)** e validada pela CLI; falta só validar
+  pelo WhatsApp (chip). Próxima evolução possível (registrada): passo dedicado de
+  "reescrever para pergunta autônoma" se a resolução por embedding se mostrar ambígua
+  (ex.: "o artigo seguinte" hoje é resolvido como referência, mas a recuperação do
+  artigo exato é fraca → recusa em vez de inventar).
 - **Lembrete proativo — NÃO envia ainda:** o Cérebro 1 já grava `compromissos.lembrete_em`
   e existe o template `lembrete_generico`, mas falta o **job agendado** que lê os
   vencimentos e dispara (nos moldes do sync do corpus, respeitando janela 24h/template).
@@ -204,13 +225,12 @@
 
 ## Próximos passos previstos
 
-1. **Rodar a ingestão/sync do corpus**, **agendar o Railway Cron semanal** e
-   **validar o RAG** (dispositivo real cita certo; armadilha recusa; revogada não
-   afirma); validar também C1 e pagamento sandbox.
-2. **Jurisprudência — agregador pago** plugado no `SourcePort` (mesma sync), ou
-   **Cérebro 3 (tribunais)**.
-3. Incrementos do Cérebro 1 (honorários/custos, edição, lembretes proativos);
-   dunning de cobrança; mídia→Storage.
+1. **Lembrete proativo** (próximo passo combinado): job agendado que lê
+   `compromissos.lembrete_em` e dispara pelo template, respeitando janela 24h.
+2. **Agendar o Railway Cron** (sync semanal do corpus) e **validar pelo WhatsApp**
+   (memória, C1, RAG) quando houver chip; pagamento sandbox (6B).
+3. **Jurisprudência — agregador pago** no `SourcePort` (mesma sync), ou **Cérebro 3
+   (tribunais)**; incrementos do Cérebro 1; dunning de cobrança; mídia→Storage.
 
 ## Como rodar
 

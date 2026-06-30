@@ -53,6 +53,14 @@ const envSchema = z.object({
   // Quantos trechos a busca vetorial recupera por pergunta (top-k). Mais alto =
   // menos chance de perder o artigo certo, ao custo de mais ruído/tokens.
   RAG_TOP_K: z.coerce.number().int().positive().default(8),
+
+  // Memória de conversa (Passo 9). Só interpreta a próxima mensagem; nunca é fonte.
+  CONVERSA_MEMORIA_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  CONVERSA_MEMORIA_TURNOS: z.coerce.number().int().positive().default(6),
+  CONVERSA_MEMORIA_TTL_MIN: z.coerce.number().int().positive().default(30),
 });
 
 export type Config = z.infer<typeof envSchema>;

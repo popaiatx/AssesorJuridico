@@ -43,6 +43,7 @@ import {
 } from '../../adapters/cerebro1/supabase-cerebro1-store.js';
 import { Cerebro2Handler } from '../../application/cerebro2/cerebro2-handler.js';
 import { supabaseCorpusStore } from '../../adapters/corpus/supabase-corpus-store.js';
+import { conversationMemoryStore } from '../db/conversation-memory-store.js';
 import { getEmbeddingsConfig } from '../../adapters/embeddings/config.js';
 import { createEmbeddingsAdapter } from '../../adapters/embeddings/factory.js';
 import { getWhatsappConfig } from '../../adapters/whatsapp/config.js';
@@ -161,6 +162,13 @@ function registerWhatsapp(app: FastifyInstance): void {
     // Porteiro: bloqueia tudo após o trial (fail-closed) e desvia para pagamento.
     gate: new SupabaseSubscriptionGate(),
     paymentRequiredHandler,
+    // Memória de conversa (Passo 9): só interpreta a mensagem; nunca é fonte.
+    memory: conversationMemoryStore,
+    memoriaConfig: {
+      enabled: config.CONVERSA_MEMORIA_ENABLED,
+      turnos: config.CONVERSA_MEMORIA_TURNOS,
+      ttlMin: config.CONVERSA_MEMORIA_TTL_MIN,
+    },
   });
 
   const wcfg = getWhatsappConfig();
