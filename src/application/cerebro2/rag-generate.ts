@@ -51,10 +51,19 @@ export async function ragGenerate(
     system: SYSTEM,
     messages: [{ role: 'user', content: JSON.stringify({ pergunta, trechos }) }],
     responseFormat: RESPONSE_FORMAT,
-    maxTokens: 600,
+    // Folga para a resposta estruturada não ser cortada (várias afirmações +
+    // orientação). Se ainda assim vier truncada, o parse degrada com segurança.
+    maxTokens: 1500,
   });
 
-  const parsed = JSON.parse(result.text) as Partial<LlmRagOutput>;
+  let parsed: Partial<LlmRagOutput>;
+  try {
+    parsed = JSON.parse(result.text) as Partial<LlmRagOutput>;
+  } catch {
+    // JSON truncado/ inválido (ex.: estourou maxTokens) → NUNCA derruba o Cérebro 2:
+    // degrada para recusa segura (vira resposta transparente tipo C no compose).
+    return { orientacao: '', afirmacoes: [], recusou: true };
+  }
   const afirmacoes = Array.isArray(parsed.afirmacoes)
     ? parsed.afirmacoes.filter(
         (a): a is { texto: string; fonte: string } =>

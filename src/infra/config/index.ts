@@ -50,6 +50,9 @@ const envSchema = z.object({
   EMBEDDINGS_API_KEY: z.string().optional(),
   // Limiar mínimo de similaridade para um trecho ser "fonte" de afirmação.
   RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.3),
+  // Quantos trechos a busca vetorial recupera por pergunta (top-k). Mais alto =
+  // menos chance de perder o artigo certo, ao custo de mais ruído/tokens.
+  RAG_TOP_K: z.coerce.number().int().positive().default(8),
 });
 
 export type Config = z.infer<typeof envSchema>;

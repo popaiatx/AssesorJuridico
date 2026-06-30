@@ -19,7 +19,7 @@ interface Logger {
   error(obj: Record<string, unknown>, msg?: string): void;
 }
 
-const K = 6;
+const K_DEFAULT = 8;
 const INDISPONIVEL =
   'Não consegui consultar o acervo jurídico agora. Pode tentar de novo em instantes? 🙏';
 
@@ -28,6 +28,8 @@ export interface Cerebro2HandlerDeps {
   embeddings: EmbeddingsPort;
   corpus: CorpusStore;
   minSimilarity: number;
+  /** Quantos trechos recuperar (top-k). Default 8. */
+  topK?: number;
   logger: Logger;
 }
 
@@ -55,7 +57,7 @@ export class Cerebro2Handler implements IntentHandler {
 
     let rows: CorpusTrecho[];
     try {
-      rows = await this.deps.corpus.search(vetor, K);
+      rows = await this.deps.corpus.search(vetor, this.deps.topK ?? K_DEFAULT);
     } catch (err) {
       this.deps.logger.error({ err }, 'cerebro2: falha na busca do corpus');
       return { replyText: INDISPONIVEL };

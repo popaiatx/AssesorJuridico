@@ -54,6 +54,7 @@ try {
     embeddings: createEmbeddingsAdapter(requireEmbeddingsConfig()),
     corpus: supabaseCorpusStore,
     minSimilarity: config.RAG_MIN_SIMILARITY,
+    topK: config.RAG_TOP_K,
     logger,
   });
 

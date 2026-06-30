@@ -117,6 +117,7 @@ function registerWhatsapp(app: FastifyInstance): void {
         embeddings: createEmbeddingsAdapter(embCfg),
         corpus: supabaseCorpusStore,
         minSimilarity: config.RAG_MIN_SIMILARITY,
+        topK: config.RAG_TOP_K,
         logger: app.log,
       });
       app.log.info(`Embeddings habilitados (${embCfg.provider}/${embCfg.model}) — Cérebro 2 ativo`);
