@@ -7,6 +7,8 @@
  * (A/B/C). Falha de embeddings/busca → mensagem transitória (sem inventar);
  * falha do LLM → recusa segura. Corpus é público; só a pergunta vai ao LLM (sem PII).
  */
+import { fontesRecentes } from '../../core/domain/conversation/memory.js';
+import { deveInjetarContexto, montarConsulta } from '../../core/domain/cerebro2/follow-up.js';
 import { composeRagReply, type RagTrecho } from '../../core/domain/cerebro2/rag.js';
 import type { Intent } from '../../core/domain/intents.js';
 import type { HandlerResult, IntentHandler, MessageContext } from '../../core/orchestration/handler.js';
@@ -46,9 +48,16 @@ export class Cerebro2Handler implements IntentHandler {
     const pergunta = (ctx.message.text ?? '').trim();
     if (!pergunta) return { replyText: 'Sobre qual tema jurídico posso ajudar?' };
 
+    // Memória só para INTERPRETAR: se for follow-up (heurística conservadora),
+    // a consulta combina a mensagem atual (que domina) + citações recentes; senão,
+    // novo foco (consulta = mensagem). Nunca é fonte — a citação segue validada.
+    const usaContexto = deveInjetarContexto(pergunta, ctx.recentContext);
+    const consulta = usaContexto ? montarConsulta(pergunta, ctx.recentContext!) : pergunta;
+    const contextoFontes = usaContexto ? fontesRecentes(ctx.recentContext!.turnos).slice(0, 3) : [];
+
     let vetor: number[] | undefined;
     try {
-      vetor = (await this.deps.embeddings.embed([pergunta]))[0];
+      vetor = (await this.deps.embeddings.embed([consulta]))[0];
     } catch (err) {
       this.deps.logger.error({ err }, 'cerebro2: falha no embedding');
       return { replyText: INDISPONIVEL };
@@ -68,7 +77,7 @@ export class Cerebro2Handler implements IntentHandler {
 
     let llmOut;
     try {
-      llmOut = await ragGenerate(this.deps.llm, pergunta, pertinentes);
+      llmOut = await ragGenerate(this.deps.llm, pergunta, pertinentes, contextoFontes);
     } catch (err) {
       // Falha do LLM → recusa segura (nunca inventa).
       this.deps.logger.error({ err }, 'cerebro2: falha ao gerar resposta');

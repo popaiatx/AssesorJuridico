@@ -95,6 +95,57 @@ describe('Cerebro2Handler — RAG', () => {
   });
 });
 
+describe('Cerebro2Handler — memória de conversa (interpretar, não inventar)', () => {
+  class CapturingEmbeddings implements EmbeddingsPort {
+    public queries: string[] = [];
+    embed(texts: string[]): Promise<number[][]> {
+      this.queries.push(...texts);
+      return Promise.resolve(texts.map(() => [0.1, 0.2, 0.3]));
+    }
+  }
+  const recentCPC: MessageContext['recentContext'] = {
+    turnos: [{ papel: 'assistant', intent: 'duvida_juridica', fontes: ['art. 335 do CPC'], em: 't' }],
+  };
+
+  it('follow-up anafórico → a consulta combina a mensagem (1º) + a citação recente', async () => {
+    const emb = new CapturingEmbeddings();
+    const h = new Cerebro2Handler({
+      llm: new FakeLlm(json({ orientacao: '', afirmacoes: [], recusou: true })),
+      embeddings: emb,
+      corpus: new FakeCorpus([trecho]),
+      minSimilarity: 0.3,
+      logger: { error: () => {} },
+    });
+    await h.handle({
+      assinanteId: 'A',
+      intent: 'duvida_juridica',
+      message: makeMessage('e o prazo dela?'),
+      recentContext: recentCPC,
+    });
+    expect(emb.queries[0]!.startsWith('e o prazo dela?')).toBe(true);
+    expect(emb.queries[0]).toContain('art. 335 do CPC'); // contexto desambigua
+  });
+
+  it('ADVERSARIAL: mensagem com outra lei começando por "e" → consulta = mensagem (não contamina)', async () => {
+    const emb = new CapturingEmbeddings();
+    const h = new Cerebro2Handler({
+      llm: new FakeLlm(json({ orientacao: '', afirmacoes: [], recusou: true })),
+      embeddings: emb,
+      corpus: new FakeCorpus([trecho]),
+      minSimilarity: 0.3,
+      logger: { error: () => {} },
+    });
+    await h.handle({
+      assinanteId: 'A',
+      intent: 'duvida_juridica',
+      message: makeMessage('e na CLT, quanto é a multa do FGTS?'),
+      recentContext: recentCPC,
+    });
+    expect(emb.queries[0]).toBe('e na CLT, quanto é a multa do FGTS?'); // SEM o art. 335 do CPC
+    expect(emb.queries[0]).not.toContain('CPC');
+  });
+});
+
 describe('roteamento + log de fontes', () => {
   it('duvida_juridica → handler; orquestrador grava cerebro e fontes', async () => {
     const log = new InMemoryInteractionLog();

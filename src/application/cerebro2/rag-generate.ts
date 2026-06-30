@@ -16,6 +16,8 @@ const SYSTEM = [
   '- Você PODE dar `orientacao` geral de apoio (conceitos, estrutura, o que costuma importar)',
   '  SEM citar dispositivo concreto, número de artigo, prazo específico ou súmula (isso é afirmação e exige fonte).',
   '- NUNCA invente número de artigo, lei, súmula ou precedente.',
+  '- O campo `contexto_para_entender` (se houver) é só para resolver referências da',
+  '  pergunta (ex.: "dela" = qual lei); NUNCA é fonte e NUNCA pode virar afirmação.',
 ].join('\n');
 
 const RESPONSE_FORMAT: LlmResponseFormat = {
@@ -45,11 +47,17 @@ export async function ragGenerate(
   llm: LlmPort,
   pergunta: string,
   pertinentes: CorpusTrecho[],
+  contextoParaEntender: string[] = [],
 ): Promise<LlmRagOutput> {
   const trechos = pertinentes.map((t) => ({ fonte: t.citacao, texto: t.texto }));
+  // Contexto recente (citações públicas) só para resolver referências — NÃO é fonte.
+  const payload =
+    contextoParaEntender.length > 0
+      ? { contexto_para_entender: contextoParaEntender, pergunta, trechos }
+      : { pergunta, trechos };
   const result = await llm.generate({
     system: SYSTEM,
-    messages: [{ role: 'user', content: JSON.stringify({ pergunta, trechos }) }],
+    messages: [{ role: 'user', content: JSON.stringify(payload) }],
     responseFormat: RESPONSE_FORMAT,
     // Folga para a resposta estruturada não ser cortada (várias afirmações +
     // orientação). Se ainda assim vier truncada, o parse degrada com segurança.
