@@ -119,6 +119,7 @@ export async function syncCorpus(
   for (const ref of refs) {
     result.normasVerificadas += 1;
     try {
+      logger.info({ identificador: ref.identificador }, 'sync: baixando');
       const conteudo = await deps.source.fetchNorma(ref);
       const novoHash = hash(normalizeForHash(conteudo.texto));
       const estado = await deps.store.getNormaState(ref.identificador);
@@ -166,6 +167,10 @@ export async function syncCorpus(
             erro: '0 trechos extraídos (parser/URL); trechos existentes preservados.',
           });
         } else {
+          logger.info(
+            { identificador: ref.identificador, trechos: chunks.length },
+            'sync: embedando e gravando',
+          );
           const vetores = await embedInBatches(
             deps.embeddings,
             chunks.map((c) => c.texto),
@@ -191,6 +196,10 @@ export async function syncCorpus(
         ultimaSincronizacao: now().toISOString(),
         revogadaEm,
       });
+      logger.info(
+        { identificador: ref.identificador, vigencia, atualizou: mudou },
+        'sync: norma concluída',
+      );
     } catch (err) {
       // Resiliência por norma: corpus daquela norma fica intacto; segue as demais.
       result.status = result.status === 'erro' ? 'erro' : 'parcial';

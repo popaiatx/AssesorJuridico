@@ -66,34 +66,35 @@ export async function upsertNorma(n: NormaInput): Promise<string> {
   return rows[0]!.id;
 }
 
-/** Ingestão: remove os trechos da norma (reingestão substitui). */
-export async function deleteTrechos(normaId: string): Promise<void> {
-  await pool`delete from corpus_trechos where norma_id = ${normaId}`;
-}
+// Trechos inseridos por statement (multi-row via unnest). Mantém a requisição num
+// tamanho saudável (cada embedding é grande) e corta milhares de round-trips para poucos.
+const INSERT_BATCH = 200;
 
-/** Ingestão: insere um trecho com seu embedding. */
-export async function insertTrecho(normaId: string, t: TrechoInput): Promise<void> {
-  await pool`
-    insert into corpus_trechos
-      (norma_id, artigo, paragrafo, inciso, ordem, texto, citacao, fonte_url, embedding)
-    values
-      (${normaId}, ${t.artigo}, ${t.paragrafo}, ${t.inciso}, ${t.ordem}, ${t.texto},
-       ${t.citacao}, ${t.fonteUrl}, ${vectorLiteral(t.embedding)}::vector)
-  `;
-}
-
-/** Ingestão/sync: substitui TODOS os trechos da norma (delete + insert) numa
- *  ÚNICA transação, para nunca deixar a norma sem trechos por falha parcial. */
+/** Ingestão/sync: substitui TODOS os trechos da norma (delete + insert em LOTE) numa
+ *  ÚNICA transação, para nunca deixar a norma sem trechos por falha parcial.
+ *  Insere em multi-row (unnest) — muito mais rápido que um INSERT por trecho. */
 export async function replaceTrechos(normaId: string, trechos: TrechoInput[]): Promise<void> {
   await pool.begin(async (tx) => {
     await tx`delete from corpus_trechos where norma_id = ${normaId}`;
-    for (const t of trechos) {
+    for (let i = 0; i < trechos.length; i += INSERT_BATCH) {
+      const slice = trechos.slice(i, i + INSERT_BATCH);
+      const artigo = slice.map((t) => t.artigo);
+      const paragrafo = slice.map((t) => t.paragrafo);
+      const inciso = slice.map((t) => t.inciso);
+      const ordem = slice.map((t) => t.ordem);
+      const texto = slice.map((t) => t.texto);
+      const citacao = slice.map((t) => t.citacao);
+      const fonteUrl = slice.map((t) => t.fonteUrl);
+      const embedding = slice.map((t) => vectorLiteral(t.embedding));
       await tx`
         insert into corpus_trechos
           (norma_id, artigo, paragrafo, inciso, ordem, texto, citacao, fonte_url, embedding)
-        values
-          (${normaId}, ${t.artigo}, ${t.paragrafo}, ${t.inciso}, ${t.ordem}, ${t.texto},
-           ${t.citacao}, ${t.fonteUrl}, ${vectorLiteral(t.embedding)}::vector)
+        select ${normaId}, a, p, inc, ord, txt, cit, url, emb::vector
+        from unnest(
+          ${artigo}::text[], ${paragrafo}::text[], ${inciso}::text[],
+          ${ordem}::int[], ${texto}::text[], ${citacao}::text[],
+          ${fonteUrl}::text[], ${embedding}::text[]
+        ) as t(a, p, inc, ord, txt, cit, url, emb)
       `;
     }
   });
