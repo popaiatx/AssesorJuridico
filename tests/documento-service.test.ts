@@ -8,6 +8,7 @@ import type {
   DocumentoStore,
   NovoDocumento,
 } from '../src/core/ports/documentos';
+import type { EmbeddingsPort } from '../src/core/ports/embeddings';
 import type { LlmGenerateParams, LlmGenerateResult, LlmPort } from '../src/core/ports/llm';
 import type { PutDocumentInput, StoragePort } from '../src/core/ports/storage';
 
@@ -41,12 +42,13 @@ interface StoredDoc extends NovoDocumento {
   resumo: string | null;
   extracaoStatus: string;
   buscaTexto: string | null;
+  embedding: number[] | null;
 }
 class FakeStore implements DocumentoStore {
   data = new Map<string, StoredDoc[]>(); // por tenant
   inserir(assinanteId: string, doc: NovoDocumento): Promise<void> {
     const arr = this.data.get(assinanteId) ?? [];
-    arr.push({ ...doc, chaves: null, resumo: null, extracaoStatus: 'ok', buscaTexto: null });
+    arr.push({ ...doc, chaves: null, resumo: null, extracaoStatus: 'ok', buscaTexto: null, embedding: null });
     this.data.set(assinanteId, arr);
     return Promise.resolve();
   }
@@ -89,15 +91,27 @@ class FakeLlm implements LlmPort {
   }
 }
 
+// Embeddings fake: registra os textos pedidos e devolve um vetor fixo (ou falha).
+class FakeEmbeddings implements EmbeddingsPort {
+  calls: string[][] = [];
+  constructor(private readonly mode: 'ok' | 'falha' = 'ok') {}
+  embed(texts: string[]): Promise<number[][]> {
+    this.calls.push(texts);
+    if (this.mode === 'falha') return Promise.reject(new Error('API fora'));
+    return Promise.resolve(texts.map(() => [0.1, 0.2, 0.3]));
+  }
+}
+
 const extOk = (): Promise<ExtracaoResultado> => Promise.resolve({ texto: 'Contrato de locação entre Maria e Empresa X. Valor mensal...', status: 'ok', formato: 'pdf' });
 const extSemTexto = (): Promise<ExtracaoResultado> => Promise.resolve({ texto: '', status: 'sem_texto', formato: 'imagem', aviso: 'imagem; OCR em breve' });
 
-function build(opts: { ext?: () => Promise<ExtracaoResultado>; processos?: Record<string, string> } = {}) {
+function build(opts: { ext?: () => Promise<ExtracaoResultado>; processos?: Record<string, string>; embeddings?: EmbeddingsPort } = {}) {
   const storage = new FakeStorage();
   const store = new FakeStore();
   let seq = 0;
   const service = new DocumentoService({
     storage, store, llm: new FakeLlm(),
+    ...(opts.embeddings ? { embeddings: opts.embeddings } : {}),
     resolveProcessoId: (_a, cnj) => Promise.resolve(opts.processos?.[cnj] ?? null),
     extrair: opts.ext ?? extOk,
     novoId: () => `doc${++seq}`,
@@ -153,6 +167,42 @@ describe('DocumentoService — ação direta', () => {
     const r = await solto.service.processarComAcao('A', entrada({ numeroCnj: '00012345620248260100' }), 'salvar');
     expect(solto.store.data.get('A')![0]!.processoId).toBeNull();
     expect(r).toContain('guardei solto');
+  });
+});
+
+describe('DocumentoService — embedding na escrita (12B)', () => {
+  it('ok + embeddings: gera o embedding a partir do busca_texto e grava', async () => {
+    const emb = new FakeEmbeddings();
+    const { service, store } = build({ embeddings: emb });
+    await service.processarComAcao('A', entrada(), 'salvar');
+    const d = store.data.get('A')![0]!;
+    expect(d.embedding).toEqual([0.1, 0.2, 0.3]);
+    expect(emb.calls).toHaveLength(1);
+    expect(emb.calls[0]![0]).toBe(d.buscaTexto); // fonte = busca_texto
+  });
+
+  it('sem embeddings configurados: guarda sem embedding (achável pela busca exata)', async () => {
+    const { service, store } = build();
+    await service.processarComAcao('A', entrada(), 'salvar');
+    expect(store.data.get('A')![0]!.embedding).toBeNull();
+  });
+
+  it('sem_texto: NÃO chama embeddings e fica sem embedding', async () => {
+    const emb = new FakeEmbeddings();
+    const { service, store } = build({ ext: extSemTexto, embeddings: emb });
+    await service.processarComAcao('A', entrada({ filename: 'scan.jpg', contentType: 'image/jpeg' }), 'salvar');
+    expect(emb.calls).toHaveLength(0);
+    expect(store.data.get('A')![0]!.embedding).toBeNull();
+  });
+
+  it('falha do provider de embeddings: NÃO perde o documento (guarda sem embedding)', async () => {
+    const emb = new FakeEmbeddings('falha');
+    const { service, store } = build({ embeddings: emb });
+    const r = await service.processarComAcao('A', entrada(), 'salvar');
+    expect(r).toContain('Guardei');
+    const d = store.data.get('A')![0]!;
+    expect(d.status).toBe('guardado');
+    expect(d.embedding).toBeNull();
   });
 });
 

@@ -56,6 +56,8 @@ const { supabaseStorage } = await import('../src/adapters/storage/supabase-stora
 const docsStore = await import('../src/infra/db/documentos-store.js');
 const { requireLlmConfig } = await import('../src/adapters/llm/config.js');
 const { createLlmAdapter } = await import('../src/adapters/llm/factory.js');
+const { getEmbeddingsConfig } = await import('../src/adapters/embeddings/config.js');
+const { createEmbeddingsAdapter } = await import('../src/adapters/embeddings/factory.js');
 const { DocumentoService } = await import('../src/application/documentos/documento-service.js');
 const { closeDatabase } = await import('../src/infra/db/tenant.js');
 
@@ -65,6 +67,7 @@ try {
     console.error(`Telefone ${telefone} não tem assinante. Rode antes: npm run seed:assinante -- ${telefone}`);
     process.exitCode = 1;
   } else {
+    const embCfg = getEmbeddingsConfig();
     const service = new DocumentoService({
       storage: supabaseStorage,
       store: {
@@ -75,6 +78,7 @@ try {
         remover: docsStore.removerDocumento,
       },
       llm: createLlmAdapter(requireLlmConfig()),
+      ...(embCfg ? { embeddings: createEmbeddingsAdapter(embCfg) } : {}),
       resolveProcessoId: resolveProcessoIdByCnj,
       logger: { error: (o, m) => console.error('[doc][erro]', m ?? '', o) },
     });

@@ -127,11 +127,13 @@ function registerWhatsapp(app: FastifyInstance): void {
     app.log.info(`LLM habilitado (${llmCfg.provider}/${llmCfg.model}) — Cérebro 1 ativo`);
 
     // Cérebro 2 (RAG jurídico) atende duvida_juridica — só com embeddings configurados.
+    // O mesmo adapter alimenta a busca semântica de documentos (12B).
     const embCfg = getEmbeddingsConfig();
-    if (embCfg) {
+    const embeddings = embCfg ? createEmbeddingsAdapter(embCfg) : null;
+    if (embCfg && embeddings) {
       overrides.duvida_juridica = new Cerebro2Handler({
         llm,
-        embeddings: createEmbeddingsAdapter(embCfg),
+        embeddings,
         corpus: supabaseCorpusStore,
         minSimilarity: config.RAG_MIN_SIMILARITY,
         topK: config.RAG_TOP_K,
@@ -156,6 +158,7 @@ function registerWhatsapp(app: FastifyInstance): void {
         storage: supabaseStorage,
         store: docStore,
         llm,
+        ...(embeddings ? { embeddings } : {}),
         resolveProcessoId: resolveProcessoIdByCnj,
         logger: app.log,
       });

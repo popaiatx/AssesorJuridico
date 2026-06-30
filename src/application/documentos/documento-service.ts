@@ -16,6 +16,7 @@ import { AVISO } from '../../core/domain/documentos/formato.js';
 import type { DocAcao } from '../../core/domain/documentos/decisao.js';
 import { PERGUNTA_DECISAO } from '../../core/domain/documentos/decisao.js';
 import type { DocumentoStore } from '../../core/ports/documentos.js';
+import type { EmbeddingsPort } from '../../core/ports/embeddings.js';
 import type { LlmPort } from '../../core/ports/llm.js';
 import type { StoragePort } from '../../core/ports/storage.js';
 import { buscaTextoDe, extrairChaves } from './extrair-chaves.js';
@@ -40,6 +41,9 @@ export interface DocumentoServiceDeps {
   storage: StoragePort;
   store: DocumentoStore;
   llm: LlmPort;
+  /** Embeddings p/ a busca semântica do 12B. Ausente → guarda sem embedding
+   *  (achável só pela busca exata); o backfill (doc:reindex) preenche depois. */
+  embeddings?: EmbeddingsPort;
   resolveProcessoId: (assinanteId: string, numeroCnj: string) => Promise<string | null>;
   extrair?: (bytes: Uint8Array, filename: string, ct: string | null) => Promise<ExtracaoResultado>;
   novoId?: () => string;
@@ -175,15 +179,30 @@ export class DocumentoService {
     }
     const chaves = await extrairChaves(this.deps.llm, ex.texto);
     const resumo = acao === 'ambos' ? await resumir(this.deps.llm, ex.texto) : null;
+    const buscaTexto = buscaTextoDe(chaves);
+    const embedding = await this.embeddingDe(buscaTexto, docId);
     await this.deps.store.gravarConteudo(assinanteId, docId, {
       chaves,
       resumo,
       extracaoStatus: 'ok',
-      buscaTexto: buscaTextoDe(chaves),
-      embedding: null, // Commit 2 (12B): embedding-on-write a partir do busca_texto
+      buscaTexto,
+      embedding,
     });
     const tipo = chaves.tipo ? ` (${chaves.tipo})` : '';
     const guardei = `📎 Guardei no seu acervo${tipo}${avisoProc}.`;
     return resumo ? `${resumo}\n\n${DISCLAIMER}\n\n${guardei}` : guardei;
+  }
+
+  /** Embedding do busca_texto p/ a busca semântica (12B). Falha NÃO perde o
+   *  documento: loga e devolve null (achável pela exata; doc:reindex preenche). */
+  private async embeddingDe(buscaTexto: string | null, docId: string): Promise<number[] | null> {
+    if (!this.deps.embeddings || !buscaTexto) return null;
+    try {
+      const [vetor] = await this.deps.embeddings.embed([buscaTexto]);
+      return vetor ?? null;
+    } catch (err) {
+      this.deps.logger.error({ err, docId }, 'documentos: falha ao gerar embedding (segue sem)');
+      return null;
+    }
   }
 }
