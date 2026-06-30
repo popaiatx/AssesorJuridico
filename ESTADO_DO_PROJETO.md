@@ -101,7 +101,13 @@
   0019 (validada em Postgres+pgvector). Vigência na busca (revogada fora do allowlist —
   aditivo ao 8A). `scripts/sync-corpus.ts` (`--norma`/`--force`, advisory lock),
   Railway Cron semanal. Decisão de fonte: `docs/spike-8b-fonte-legislacao.md`.
-  **182 testes verdes.**
+- **Robustez de ingestão (correções de campo):** User-Agent de navegador no fetch do
+  Planalto (WAF resetava sem ele); gravação de trechos em LOTE (unnest) + logs de
+  progresso; retry com backoff nos embeddings (429/5xx); subdivisão de trecho > limite
+  de tokens; RAG robusto a JSON truncado (degrada com segurança); **`RAG_TOP_K`
+  ajustável (default 8)**. **Corpus REAL carregado: 6 normas, todos os trechos com
+  embedding** (CF, CC, CPC, CLT, CDC, 8.213). Bateria A/B/C validada pela CLI.
+  **190 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -168,10 +174,15 @@
 - Adapters reais ainda stubs: `courts`, `storage`, **fonte de jurisprudência**.
   (`whatsapp`, `llm`, `payment`/Asaas, `embeddings` e **fonte de legislação/Planalto**
   já são reais.)
-- **Cérebro 2 — rodar a ingestão/sync e agendar:** `npm run ingest:corpus` (carga) e
-  `npm run sync:corpus` (incremental); **agendar o Railway Cron semanal**; **validar**
-  sem WhatsApp pela CLI `npm run ask:rag -- "..."` (roteiro A/B/C no README) e depois
-  pelo WhatsApp. Confirmar revogação/vigência via `corpus_sync_runs`/`corpus_normas`.
+- **Cérebro 2 — corpus carregado e validado pela CLI (feito); falta:** **agendar o
+  Railway Cron semanal** e **validar pelo WhatsApp** (depende do chip). Carga/sync via
+  `npm run ingest:corpus`/`sync:corpus`; confirmar via `corpus_sync_runs`/`corpus_normas`.
+- **Memória de conversa — NÃO existe** (cada mensagem é tratada isolada; só há o slot
+  de ação pendente do Cérebro 1 p/ confirmar-antes-de-gravar). A construir: memória
+  conversacional por usuário (contexto entre mensagens; detectar troca de assunto).
+- **Lembrete proativo — NÃO envia ainda:** o Cérebro 1 já grava `compromissos.lembrete_em`
+  e existe o template `lembrete_generico`, mas falta o **job agendado** que lê os
+  vencimentos e dispara (nos moldes do sync do corpus, respeitando janela 24h/template).
 - **Jurisprudência — agregador pago:** plugar adapter real no `SourcePort` (stub
   pronto), respeitando os termos de uso; usa a MESMA sincronização. Ampliar o
   manifesto de legislação conforme necessário.
