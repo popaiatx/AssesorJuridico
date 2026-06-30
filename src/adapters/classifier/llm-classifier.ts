@@ -6,6 +6,7 @@
  * ao `KeywordIntentClassifier` (fallback). Contexto mínimo ao LLM — vai só o
  * texto da mensagem + system prompt; nenhum dado de assinante.
  */
+import { fontesRecentes, intentRecente, type RecentContext } from '../../core/domain/conversation/memory.js';
 import type { Intent } from '../../core/domain/intents.js';
 import { INTENTS, INTENT_LABEL } from '../../core/domain/intents.js';
 import type {
@@ -19,9 +20,21 @@ const AMBIGUOUS_THRESHOLD = 0.5;
 const SYSTEM_PROMPT = [
   'Você classifica a intenção de mensagens de advogados num assistente jurídico no WhatsApp.',
   'Escolha UMA intenção da lista e dê uma confiança de 0 a 1.',
+  'Pode haver um "Contexto recente" só para entender follow-ups curtos (ex.: "e o prazo dela?").',
+  'Use-o apenas se a mensagem atual claramente continua o assunto; se for de OUTRO tema, ignore o contexto.',
   'Responda apenas no formato estruturado pedido. Intenções:',
   ...INTENTS.map((i) => `- ${i}: ${INTENT_LABEL[i]}`),
 ].join('\n');
+
+/** Linha de contexto MÍNIMA (só intenção recente + citações públicas; sem PII). */
+function contextLine(recentContext: RecentContext): string {
+  const intent = intentRecente(recentContext.turnos);
+  const fontes = fontesRecentes(recentContext.turnos).slice(0, 3);
+  const partes: string[] = [];
+  if (intent) partes.push(`última intenção=${intent}`);
+  if (fontes.length > 0) partes.push(`referências citadas=${fontes.join('; ')}`);
+  return partes.length > 0 ? `Contexto recente: ${partes.join(' | ')}` : '';
+}
 
 const RESPONSE_FORMAT: LlmResponseFormat = {
   type: 'json_schema',
@@ -47,17 +60,19 @@ export class LlmIntentClassifier implements IntentClassifier {
     private readonly fallback: IntentClassifier,
   ) {}
 
-  async classify(text: string): Promise<ClassificationResult> {
+  async classify(text: string, recentContext?: RecentContext): Promise<ClassificationResult> {
+    const ctx = recentContext ? contextLine(recentContext) : '';
+    const userContent = ctx ? `${ctx}\n\nMensagem atual: ${text}` : text;
     try {
       const result = await this.llm.generate({
         system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: text }],
+        messages: [{ role: 'user', content: userContent }],
         maxTokens: 256,
         responseFormat: RESPONSE_FORMAT,
       });
       const parsed = JSON.parse(result.text) as { intent?: unknown; confidence?: unknown };
       if (!isIntent(parsed.intent)) {
-        return this.fallback.classify(text);
+        return this.fallback.classify(text, recentContext);
       }
       const confidence =
         typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0.5;
@@ -69,7 +84,7 @@ export class LlmIntentClassifier implements IntentClassifier {
       };
     } catch {
       // Qualquer falha (rede, JSON inválido, etc.) → fallback determinístico.
-      return this.fallback.classify(text);
+      return this.fallback.classify(text, recentContext);
     }
   }
 }
