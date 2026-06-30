@@ -12,6 +12,12 @@ const SYSTEM_RESUMO = [
   'pontos principais e pendências. Baseie-se SOMENTE no texto; não invente.',
 ].join('\n');
 
+/** Acrescenta um foco custom ao system do resumo (12C — resumo sob demanda). */
+function systemComFoco(foco: string | undefined): string {
+  const f = (foco ?? '').trim();
+  return f ? `${SYSTEM_RESUMO}\nDê atenção especial a: ${f}.` : SYSTEM_RESUMO;
+}
+
 const SYSTEM_CONSOLIDA = [
   'Você recebe resumos parciais de um mesmo documento (em ordem). Consolide em um',
   'resumo único e coerente para um advogado (tipo, partes, datas/prazos, pontos,',
@@ -45,13 +51,14 @@ async function resumirPedaco(llm: LlmPort, texto: string, system: string): Promi
   return r.text.trim();
 }
 
-export async function resumir(llm: LlmPort, texto: string): Promise<string> {
+export async function resumir(llm: LlmPort, texto: string, foco?: string): Promise<string> {
+  const system = systemComFoco(foco);
   if (texto.length <= MAX_PEDACO) {
-    return resumirPedaco(llm, texto, SYSTEM_RESUMO);
+    return resumirPedaco(llm, texto, system);
   }
-  // Map: resume cada parte. Reduce: consolida.
+  // Map: resume cada parte (com o foco). Reduce: consolida.
   const partes = splitBySize(texto, MAX_PEDACO);
   const parciais: string[] = [];
-  for (const p of partes) parciais.push(await resumirPedaco(llm, p, SYSTEM_RESUMO));
+  for (const p of partes) parciais.push(await resumirPedaco(llm, p, system));
   return resumirPedaco(llm, parciais.join('\n\n---\n\n'), SYSTEM_CONSOLIDA);
 }

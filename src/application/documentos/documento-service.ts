@@ -12,7 +12,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { extrairTexto, type ExtracaoResultado } from '../../adapters/documentos/extractors.js';
-import { AVISO } from '../../core/domain/documentos/formato.js';
+import { AVISO, DISCLAIMER_RESUMO } from '../../core/domain/documentos/formato.js';
 import type { DocAcao } from '../../core/domain/documentos/decisao.js';
 import { PERGUNTA_DECISAO } from '../../core/domain/documentos/decisao.js';
 import type { DocumentoStore } from '../../core/ports/documentos.js';
@@ -22,7 +22,7 @@ import type { StoragePort } from '../../core/ports/storage.js';
 import { buscaTextoDe, extrairChaves } from './extrair-chaves.js';
 import { resumir } from './resumir.js';
 
-const DISCLAIMER = 'ℹ️ Resumo de apoio — confira no documento; não substitui a sua análise.';
+const DISCLAIMER = DISCLAIMER_RESUMO;
 
 interface Logger {
   error(obj: Record<string, unknown>, msg?: string): void;

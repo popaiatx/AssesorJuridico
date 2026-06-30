@@ -63,4 +63,18 @@ export const AVISO = {
   guardadoSemTexto:
     'Guardei o arquivo, mas como não consegui ler o texto dele, ele *não poderá ser ' +
     'encontrado por conteúdo* depois — só por nome/data.',
+  /** 12C: referência não resolveu para um documento do próprio assinante. */
+  naoEncontrado: 'Não encontrei esse documento no seu acervo.',
+  /** 12C: documento sem texto (escaneado) não tem como ser resumido. */
+  semTextoResumo:
+    'Esse documento foi guardado como imagem/escaneado (sem texto), então não dá para ' +
+    'resumir o conteúdo. Posso te mandar o arquivo para você abrir, se quiser.',
+  /** 12C: falhou ao reler o arquivo do Storage para gerar um resumo novo. */
+  falhaRelerResumo:
+    'Não consegui reler o conteúdo desse documento agora para resumir. Tente de novo em ' +
+    'instantes.',
 } as const;
+
+/** Aviso de apoio acrescentado a TODO resumo exibido (12A/12C). */
+export const DISCLAIMER_RESUMO =
+  'ℹ️ Resumo de apoio — confira no documento; não substitui a sua análise.';

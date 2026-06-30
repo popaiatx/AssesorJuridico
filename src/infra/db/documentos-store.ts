@@ -77,6 +77,22 @@ export async function gravarConteudoDocumento(
   });
 }
 
+/** Persiste o resumo gerado (Passo 12C) — escopado por tenant (RLS). */
+export async function setResumoDocumento(
+  assinanteId: string,
+  id: string,
+  resumo: string,
+): Promise<boolean> {
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<{ id: string }[]>`
+      update documentos set resumo = ${resumo}
+      where id = ${id} and assinante_id = ${assinanteId}
+      returning id
+    `;
+    return rows.length > 0;
+  });
+}
+
 export async function getDocumentoById(
   assinanteId: string,
   id: string,

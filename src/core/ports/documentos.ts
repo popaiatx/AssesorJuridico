@@ -75,6 +75,18 @@ export interface DocumentoSearchStore {
   contarSemTexto(assinanteId: string): Promise<number>;
 }
 
+/**
+ * Resumo de documento guardado (Passo 12C). A posse é SEMPRE re-verificada por
+ * tenant (RLS via withTenant): `getById` devolve null se o doc não for do
+ * assinante, e `setResumo` só grava no doc do próprio assinante. O `storageRef`
+ * para a releitura vem da linha retornada por `getById` — nunca do usuário/LLM.
+ */
+export interface DocumentoResumoStore {
+  getById(assinanteId: string, id: string): Promise<DocumentoRow | null>;
+  /** Persiste o resumo gerado no doc do tenant. Retorna se alterou 1 linha. */
+  setResumo(assinanteId: string, id: string, resumo: string): Promise<boolean>;
+}
+
 export interface DocumentoStore {
   /** Insere o registro (staging ou já guardado), escopado por tenant. */
   inserir(assinanteId: string, doc: NovoDocumento): Promise<void>;
