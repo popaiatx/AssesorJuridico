@@ -3,6 +3,9 @@
 > Documento vivo (convenção C do `CLAUDE.md`). Resumo do estado atual para
 > retomar o trabalho a qualquer momento. **Não é changelog** — o histórico está
 > no git. Atualizado ao final de cada passo, antes do push.
+>
+> Mapa prático de módulos e como testar: [`GUIA.md`](GUIA.md). Roteiros de
+> ingestão/sync e validação A/B/C: [`README.md`](README.md).
 
 ## Fase atual
 

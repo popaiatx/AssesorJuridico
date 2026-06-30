@@ -6,7 +6,9 @@ camadas, banco com isolamento por tenant, interfaces (ports) e health check.
 **Ainda não há funcionalidades de produto.**
 
 Leia antes de evoluir: [`CLAUDE.md`](./CLAUDE.md), [`PLANEJAMENTO.md`](./PLANEJAMENTO.md)
-e as skills em `.claude/skills/`.
+e as skills em `.claude/skills/`. Para um **mapa do que já existe e como testar cada
+módulo**, veja o [`GUIA.md`](./GUIA.md) (estado canônico em
+[`ESTADO_DO_PROJETO.md`](./ESTADO_DO_PROJETO.md)).
 
 ## Stack
 
