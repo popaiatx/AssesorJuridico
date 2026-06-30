@@ -22,6 +22,30 @@ export interface LegChunk {
 
 const ART_RE = /\bart(?:igo)?\.?\s*(\d+(?:º|o|°)?(?:-[A-Za-z])?)/gi;
 
+// Teto de caracteres por trecho. O modelo de embeddings tem limite de 8192 TOKENS
+// por input; um artigo muito longo (ou um trecho sem marcadores `art.`) precisa ser
+// subdividido. ~12k chars fica com folga sob 8192 tokens mesmo em PT-BR acentuado.
+const MAX_CHARS = 12000;
+
+/** Quebra um texto longo em pedaços <= max, preferindo cortar em quebra de linha
+ *  ou espaço (nunca no meio de palavra). Mantém todo o conteúdo. */
+function splitLongo(s: string, max: number): string[] {
+  if (s.length <= max) return [s];
+  const partes: string[] = [];
+  let i = 0;
+  while (i < s.length) {
+    let end = Math.min(i + max, s.length);
+    if (end < s.length) {
+      const corte = Math.max(s.lastIndexOf('\n', end), s.lastIndexOf(' ', end));
+      if (corte > i) end = corte;
+    }
+    const parte = s.slice(i, end).trim();
+    if (parte.length > 0) partes.push(parte);
+    i = end;
+  }
+  return partes.length > 0 ? partes : [s.slice(0, max)];
+}
+
 function normalizeNum(raw: string): string {
   const m = raw.match(/^(\d+)(?:º|o|°)?(-[A-Za-z])?$/);
   if (!m) return raw;
@@ -45,7 +69,18 @@ export function chunkLegislacao(texto: string, meta: ChunkMeta): LegChunk[] {
     const citacao = meta.sigla
       ? `${artigo} do ${meta.sigla}`
       : `${artigo} — ${meta.identificador}`;
-    chunks.push({ artigo, paragrafo: null, inciso: null, ordem: chunks.length + 1, texto: corpo, citacao });
+    // Subdivide artigos longos demais para o limite de tokens do embedding. Cada
+    // pedaço vira um trecho com a MESMA citação (todos são aquele artigo).
+    for (const parte of splitLongo(corpo, MAX_CHARS)) {
+      chunks.push({
+        artigo,
+        paragrafo: null,
+        inciso: null,
+        ordem: chunks.length + 1,
+        texto: parte,
+        citacao,
+      });
+    }
   }
   return chunks;
 }

@@ -17,6 +17,21 @@ describe('chunkLegislacao', () => {
     expect(chunks[1]!.citacao).toBe('art. 6º do CDC');
     expect(chunks[1]!.texto).toContain('Parágrafo único'); // parágrafo fica no corpo do art.
   });
+
+  it('subdivide artigo grande demais (limite de tokens) em pedaços com a mesma citação', () => {
+    // Artigo único com corpo gigante (sem outros marcadores) → vários trechos.
+    const corpoGigante = 'palavra '.repeat(5000); // ~40k chars
+    const texto = `Art. 58 ${corpoGigante}`;
+    const chunks = chunkLegislacao(texto, {
+      sigla: 'CLT',
+      identificador: 'Decreto-Lei nº 5.452/1943',
+      fonteUrl: 'http://planalto/clt',
+    });
+    expect(chunks.length).toBeGreaterThan(1); // foi subdividido
+    expect(chunks.every((c) => c.texto.length <= 12000)).toBe(true); // cada pedaço sob o teto
+    expect(chunks.every((c) => c.citacao === 'art. 58 do CLT')).toBe(true); // mesma citação
+    expect(chunks.map((c) => c.ordem)).toEqual(chunks.map((_, i) => i + 1)); // ordem sequencial
+  });
 });
 
 const trechoCDC: RagTrecho = {
