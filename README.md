@@ -78,9 +78,17 @@ A primeira vez que o LLM **age** sobre os dados do próprio usuário. Princípio
 **"painel de botões", não SQL livre** — o LLM escolhe uma **ação** (tool-use) e
 extrai parâmetros; o **código executa** por query parametrizada e tipada.
 
-- **Ações:** `criar_compromisso`, `listar_compromissos`, `cadastrar_processo`,
-  `listar_processos`, `consultar_processo`, `ajuda_assessor` (registro tipado,
-  fácil de expandir — custos/honorários virão depois).
+- **Ações:** `criar_compromisso`, `listar_compromissos`, `editar_compromisso`,
+  `cancelar_compromisso`, `cadastrar_processo`, `listar_processos`,
+  `consultar_processo`, `editar_processo`, `arquivar_processo`, `ajuda_assessor`
+  (registro tipado, fácil de expandir — financeiro/honorários virão depois).
+- **Editar/remover (Passo 11):** o alvo é resolvido por um **seletor** (processo/
+  tipo/dia, ou CNJ/cliente/parte) **escopado por tenant**; se casar com vários, o
+  assessor **pergunta qual** (lista numerada) — **nunca adivinha**; se nenhum, avisa.
+  A confirmação mostra o **registro real** (reforçada na remoção: "⚠️ vou REMOVER…,
+  definitivo"). **Remarcar recalcula os lembretes** (24h/1h da nova data, nada no
+  passado) e descarta a marcação antiga. Compromisso é removido de fato; processo é
+  **arquivado** (reversível, mantém histórico) — sem exclusão destrutiva.
 - **Seleção (1 chamada):** contexto mínimo ao LLM — só a mensagem + o menu de ações
   + a data/hora atual (para datas relativas). **Nenhuma linha do banco** nessa chamada.
 - **Confirmar antes de gravar:** toda escrita mostra o que será salvo em linguagem
@@ -636,7 +644,7 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0021)
+## Tabelas (migrações 0001–0022)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`
@@ -658,7 +666,9 @@ A `0020` cria `conversa_memoria` (memória de conversa **por tenant**, RLS force
 janela curta com só intenção + citações públicas; nunca é fonte jurídica. A `0021`
 cria `lembretes_enviados` (idempotência do lembrete proativo, RLS force) + as funções
 SECURITY DEFINER `app.lembretes_due` (seleção dos devidos) e
-`app.marcar_lembrete_enviado` (marcação atômica).
+`app.marcar_lembrete_enviado` (marcação atômica). A `0022` concede `delete` em
+`lembretes_enviados` a `authenticated` (limpar a marcação ao remarcar; a policy por
+tenant mantém o isolamento) — base do editar/remover do Cérebro 1.
 
 ## PENDENTE (fora do escopo atual)
 

@@ -21,9 +21,12 @@
   afrouxar isolamento/antialucinação. Concluído também o **Passo 10 — Lembrete
   proativo**: job agendado (Railway Cron) que avisa o advogado antes de
   audiências/prazos, idempotente, no fuso de Brasília, via template — validável por
-  **dry-run** sem chip. Falta **agendar os Crons no Railway** (sync semanal + lembretes
-  15 min), **aprovar o template `lembrete_generico` na Meta** e **validar pelo WhatsApp**
-  (tudo depende do chip).
+  **dry-run** sem chip. Concluído também o **Passo 11 — editar/remover no Cérebro 1**
+  (editar/cancelar compromisso, editar/arquivar processo) com resolução de alvo
+  escopada por tenant, desambiguação numerada, confirmação reforçada na remoção e
+  recálculo de lembretes na remarcação. Falta **agendar os Crons no Railway** (sync
+  semanal + lembretes 15 min), **aprovar o template `lembrete_generico` na Meta** e
+  **validar pelo WhatsApp** (tudo depende do chip).
   Próximo: **jurisprudência** (agregador pago) ou **Cérebro 3 (tribunais)**.
   Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B) — pelo chip.
 
@@ -136,6 +139,16 @@
   Motor `send-lembretes` (marca-após-sucesso; resiliência por lembrete; advisory lock);
   `format.ts` (texto + fuso BR). **Dry-run fiel** (`--dry-run [--now ISO]`) que NÃO
   envia nem marca. Envio proativo via template `lembrete_generico`. **217 testes verdes.**
+- **Passo 11 — editar/remover no Cérebro 1.** 4 ações tipadas (`editar_compromisso`,
+  `cancelar_compromisso`, `editar_processo`, `arquivar_processo`), sem `assinante_id`
+  no schema. O alvo é resolvido por **seletor** (processo/tipo/dia ou cnj/cliente/parte)
+  **escopado por tenant**; ambíguo → **desambiguação numerada** (fase `desambiguando`);
+  0 → resposta clara. Confirmação montada com o **registro real** (REFORÇADA na
+  remoção); id **re-verificado por tenant** na confirmação e execução. Remarcar
+  **recalcula `lembrete_em`** (24h/1h da nova data, filtra ao futuro) e **limpa
+  `lembretes_enviados`** (migração 0022 = grant delete). Remover compromisso = delete
+  real (cascade limpa enviados); processo = **arquivar** (status='arquivado', sem
+  exclusão destrutiva). **235 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -180,6 +193,10 @@
 - **Cérebro 1 = ações tipadas, não SQL livre:** o LLM escolhe a ação e extrai
   params (contexto mínimo); o código executa por query parametrizada e escopada.
   **Confirmar-antes-de-gravar**; **anonimização** ao mandar dados de leitura ao LLM.
+- **Editar/remover (caminho destrutivo) seguro:** alvo resolvido por seletor
+  escopado por tenant; **ambíguo nunca adivinha** (desambiguação numerada); confirma
+  com o **registro real** (reforçado na remoção); id **re-verificado por tenant** na
+  execução. Compromisso = delete real; processo = **arquivar** (sem exclusão).
 - **Isolamento (3 camadas):** identidade → tenant; schemas sem `assinante_id`;
   RLS backstop. `acoes_pendentes` por tenant ("sim" só resolve a ação daquele).
 - **Corpus do RAG é compartilhado, não-tenant** (oposto do Cérebro 1): leitura
@@ -232,8 +249,9 @@
   template aprovado na Meta.
 - **Fila durável do webhook** (ack rápido + worker) — caminho de escala.
 - **Cérebro 3 (tribunais)** — agregador (próximo dos cérebros).
-- **Cérebro 1 — incrementos:** custos/honorários, edição/exclusão de registros,
-  lembretes proativos (scheduler) a partir de `lembrete_em`.
+- **Cérebro 1 — incrementos restantes:** custos/honorários (financeiro). Editar/
+  remover compromisso e editar/arquivar processo já FEITOS (Passo 11); exclusão
+  destrutiva de processo deixada de fora de propósito (arquivar é o seguro).
 - Captura de `entrada`/`saida` no log (hoje `null`): só após estender a anonimização.
 - Provisionamento Supabase (projeto, pooler, role sem BYPASSRLS, backups/PITR).
 - **Pruning** das linhas antigas de `whatsapp_mensagens_processadas` e
@@ -248,7 +266,7 @@
    (memória, C1, RAG, lembrete) quando houver chip; pagamento sandbox (6B).
 2. **Jurisprudência — agregador pago** no `SourcePort` (mesma sync), ou **Cérebro 3
    (tribunais)**.
-3. Incrementos do Cérebro 1 (honorários/custos, edição); dunning de cobrança;
+3. Incrementos do Cérebro 1 (financeiro: honorários/custos); dunning de cobrança;
    mídia→Storage.
 
 ## Como rodar

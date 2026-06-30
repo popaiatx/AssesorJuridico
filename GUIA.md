@@ -38,7 +38,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | **WhatsApp (adapter)** | Entrada/saída pelo WhatsApp Cloud API: verifica webhook, faz parse das mensagens, respeita janela de 24h. |
 | **Onboarding + trial + porteiro** | Cadastro enxuto determinístico, cria assinatura `trial`; o porteiro libera/bloqueia o acesso (fail-closed). |
 | **Pagamento (Asaas)** | Gera cobrança, recebe webhook autenticado e idempotente, ativa o acesso só após confirmação no gateway. |
-| **Cérebro 1 — dados do escritório** | Linguagem natural → ação tipada (processos/compromissos) por query escopada ao tenant; confirma antes de gravar. |
+| **Cérebro 1 — dados do escritório** | Linguagem natural → ação tipada (criar/listar/**editar**/**remover** processos e compromissos) por query escopada ao tenant; confirma antes de gravar. |
 | **Cérebro 2 — RAG jurídico + sync** | Responde dúvidas jurídicas só com fonte recuperada do corpus (citação validada); corpus local mantido fresco por sincronização. |
 | **Memória de conversa** | Mantém o fio do assunto entre mensagens (resolve "dela", "o artigo seguinte") só para interpretar; nunca é fonte; por tenant, com janela e expiração. |
 | **Lembrete proativo** | Job agendado avisa o advogado antes de audiências/prazos (24h e 1h antes), idempotente, no fuso de Brasília, via template aprovado. |
@@ -74,11 +74,12 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Testar — manual (sandbox):** criar conta/chaves Asaas sandbox, configurar o webhook, simular `trial:expire` → link → pagar no sandbox → desbloqueio. **Não depende do chip** (o ciclo de pagamento pode ser exercitado no sandbox), mas o aviso proativo de cobrança pelo WhatsApp depende de template aprovado + chip.
 
 ### 5. Cérebro 1 — dados do escritório
-- **Faz:** linguagem natural → **ação tipada** (cadastrar/listar/consultar processo; criar/listar compromisso) por query parametrizada e **escopada ao tenant**; confirma antes de gravar; anonimiza ao mandar leitura ao LLM.
-- **Arquivos:** `src/application/cerebro1/`, `src/adapters/cerebro1/`, `src/core/domain/cerebro1/`, migração `0017`.
+- **Faz:** linguagem natural → **ação tipada** por query parametrizada e **escopada ao tenant**; confirma antes de gravar; anonimiza ao mandar leitura ao LLM. Ações: cadastrar/listar/consultar/**editar**/**arquivar** processo; criar/listar/**editar**/**cancelar** compromisso.
+- **Editar/remover (Passo 11):** o alvo é resolvido por seletor escopado por tenant; se há vários, **pergunta qual** (lista numerada), nunca adivinha; confirmação mostra o registro real (**reforçada na remoção**); remarcar **recalcula os lembretes** (nada no passado); processo é **arquivado** (não excluído).
+- **Arquivos:** `src/application/cerebro1/`, `src/adapters/cerebro1/`, `src/core/domain/cerebro1-actions.ts`, migrações `0017` e `0022`.
 - **Config (.env):** `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY` (+ `DATABASE_URL`, `SUPABASE_*`).
-- **Testar — automatizado:** `tests/cerebro1-*.test.ts` (ações, handler, isolamento por tenant), `tests/anonymization.test.ts`.
-- **Testar — manual:** pelo WhatsApp (**depende do chip**): "cadastra o processo …", "lista meus compromissos" — ver a confirmação antes de gravar e o isolamento entre assinantes.
+- **Testar — automatizado:** `tests/cerebro1-*.test.ts` (ações, handler, **edição/remoção**, isolamento por tenant, desambiguação, recálculo de lembrete), `tests/anonymization.test.ts`.
+- **Testar — manual:** pelo WhatsApp (**depende do chip**): "remarca a audiência do processo X para sexta", "cancela a reunião de amanhã", "arquiva o processo Y" — ver a desambiguação, a confirmação reforçada e o isolamento.
 
 ### 6. Cérebro 2 — RAG jurídico + sincronização do corpus
 - **Faz:** dúvida jurídica → embed → recupera no corpus (pgvector) → o LLM redige **só do recuperado** → valida citação → senão **recusa**. Três tipos (A afirmação com fonte / B orientação geral / C transparente sem fonte). **Revogada nunca é citada como vigente.** Corpus local mantido fresco por `sync:corpus`.
@@ -138,6 +139,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | Onboarding + trial + porteiro | ✅ | ❌ ainda não | **Sim** (fluxo real é pelo WhatsApp) |
 | Pagamento Asaas | ✅ | ❌ falta sandbox | **Não** (ciclo pode rodar no sandbox); aviso proativo sim |
 | Cérebro 1 (dados do escritório) | ✅ | ❌ ainda não | **Sim** (uso real é pelo WhatsApp) |
+| Cérebro 1 — editar/remover (compromisso) e editar/arquivar (processo) | ✅ | ❌ ainda não | **Sim**; desambiguação numerada + confirmação reforçada |
 | Cérebro 2 — motor RAG + sync | ✅ | ✅ corpus carregado; validado pela CLI | **Não** — valida pela CLI `ask:rag` |
 | Cérebro 2 — resposta pelo WhatsApp | ✅ (handler) | ❌ ainda não | **Sim** |
 | Memória de conversa | ✅ | ✅ validada pela CLI (`--conversa`) | **Não** — valida pela CLI |

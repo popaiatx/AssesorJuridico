@@ -61,6 +61,11 @@ e compromissos — **sempre pedindo confirmação antes de gravar**.
 - Você: *"Cadastra o processo 0001234-55.2024.8.26.0100 do cliente Maria Silva."* → confirma e grava.
 - Você: *"Quais são meus processos?"* / *"Quais meus compromissos da semana?"* → ele lista **somente os seus** (os dados de cada advogado são isolados; ninguém vê os do outro).
 
+**Editar e cancelar (novo):** você também corrige e remove pela conversa, sempre com confirmação:
+- Você: *"Remarca a audiência do processo 12345 para sexta às 16h."* → ele mostra *"Vou alterar a audiência de 15/07 14:00 → 18/07 16:00. Responda SIM"* e, ao confirmar, **reprograma os lembretes** para a nova data automaticamente.
+- Você: *"Cancela a reunião de amanhã."* → ele mostra **exatamente** o que vai apagar (*"⚠️ Vou REMOVER a reunião de … — definitivo"*) e só remove após o **"sim"**. Se houver **mais de uma** reunião amanhã, ele **pergunta qual** (lista numerada) — nunca apaga "no chute".
+- Você: *"Muda o status do processo 12345 para suspenso."* / *"Arquiva o processo do cliente João."* → confirma e aplica. Processos são **arquivados** (somem da rotina, mas o histórico fica), nunca apagados de vez.
+
 ### 4. Lembretes automáticos
 **O que faz:** ao registrar um compromisso, ele **já programa lembretes** — **24 horas
 antes** e **1 hora antes** — que serão enviados sozinhos no seu WhatsApp, no horário de
@@ -78,8 +83,6 @@ assessor dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pessoa
 
 ## Parte 3 — O que ele ainda NÃO faz (e o que vem por aí)
 
-- **Editar ou cancelar** um compromisso/processo já cadastrado — hoje ele cria e
-  lista, mas ainda não altera/remove. *(planejado)*
 - **Entender áudios** (mensagem de voz) — *(planejado, deixado para o final)*
 - **Ler e resumir documentos** (PDF de intimação, contrato) — *(planejado)*
 - **Jurisprudência** (decisões de tribunais, súmulas) no acervo de consulta — hoje só
@@ -110,7 +113,7 @@ modelo de mensagem junto à Meta).
 ### Gestão de agenda e prazos
 - ✓ **Registrar compromissos por conversa** — agenda sem sair do WhatsApp.
 - ✓ **Lembretes automáticos (24h e 1h antes)** — nunca perder uma audiência/prazo.
-- ▶ **Editar/cancelar/remarcar compromissos** — manter a agenda viva e correta.
+- ✓ **Editar/cancelar/remarcar compromissos** — manter a agenda viva e correta (remarcar reprograma os lembretes).
 - ▶ **Cálculo assistido de prazos processuais** (com aviso de conferência) — reduzir erro de contagem.
 - 💡 **Lembretes configuráveis** (escolher quando e quantos) — adaptar ao estilo de cada advogado.
 - 💡 **Sincronizar com Google/Apple Calendar** — ver tudo na agenda que já usa.
@@ -118,7 +121,7 @@ modelo de mensagem junto à Meta).
 ### Gestão de processos e clientes
 - ✓ **Cadastrar e consultar processos por conversa** — organização sem planilha.
 - ✓ **Vincular processo ao cliente** — tudo conectado.
-- ▶ **Editar/arquivar processos e clientes** — manter a base limpa.
+- ✓ **Editar/arquivar processos** — manter a base limpa (arquivar é reversível). *(editar/arquivar cliente: a seguir)*
 - ▶ **Andamento processual (monitorar tribunais)** — ser avisado quando o processo anda.
 - ▶ **Resumo da última movimentação** — entender o que aconteceu em uma frase.
 - 💡 **Ficha do cliente** (histórico, contatos, processos) — visão 360º de cada cliente.
@@ -162,7 +165,7 @@ modelo de mensagem junto à Meta).
 | Cadastrar/consultar processos e compromissos | ✅ Sim | Sim | Pede confirmação antes de gravar; dados isolados por advogado |
 | Lembretes automáticos (24h e 1h) | ✅ Sim (lógica pronta) | **Sim** | Envio real depende do chip + aprovação do modelo na Meta |
 | Cadastro + 3 dias de teste + assinatura | ✅ Sim | Sim | Fluxo real acontece pelo WhatsApp |
-| Editar/cancelar compromissos e processos | ❌ Ainda não | — | Planejado |
+| Editar/cancelar compromissos; editar/arquivar processos | ✅ Sim | Sim | Confirma mostrando o registro real; remarcar reprograma lembretes; processo é arquivado, não apagado |
 | Entender áudios | ❌ Ainda não | — | Planejado (por último) |
 | Ler/resumir documentos (PDF) | ❌ Ainda não | — | Planejado |
 | Jurisprudência (decisões/súmulas) | ❌ Ainda não | — | Em breve (provedor especializado) |
