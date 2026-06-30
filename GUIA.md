@@ -118,7 +118,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Config (.env):** `DOCUMENTOS_BUSCA_TOPN` (5), `DOCUMENTOS_BUSCA_MIN_SIM` (0.3), `EMBEDDINGS_*` (semântica; sem ela = só exata).
 - **Sigilo (isolamento):** `assinante_id` vem **sempre da identidade**; filtro de tenant **embutido na query** (exata e semântica), **antes** do `ILIKE`/operador vetorial; **RLS force** de backstop; URL assinada só para doc que veio da query escopada (dono confirmado). O vetor de outro assinante nunca é comparado.
 - **Testar — automatizado:** `tests/buscar-documentos.test.ts` (tokens; combinação/Top N; fallback sem embeddings; **isolamento exaustivo com 2 assinantes** — A nunca vê o de B nem sendo o vetor mais próximo; número só-de-B → vazio; ponto cego conta só A; handler só assina a URL do dono). Isolamento também validado em **Postgres real (RLS)**.
-- **Testar — manual SEM chip (CLI):** `npm run doc:reindex` (backfill de embeddings, idempotente) → `npm run doc:search -- --telefone <tel> "<referência>"`. Rode com telefones de **dois** assinantes para provar o isolamento.
+- **Testar — manual SEM chip (CLI):** `npm run doc:doctor` (confere migração/pgvector/bucket) → `npm run doc:bucket` (cria o bucket se faltar) → `npm run doc:reindex` (backfill de embeddings, idempotente) → `npm run doc:search -- --telefone <tel> "<referência>"`. Rode com telefones de **dois** assinantes para provar o isolamento. Robustez: pré-requisito faltando (bucket/migração/.env) dá **mensagem clara**, não stack trace; arquivo acima de `DOCUMENTOS_MAX_MB` é recusado com aviso; formato não suportado/escaneado é guardado com aviso de ponto cego.
 
 ---
 
@@ -140,6 +140,8 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | `npm run doc:process -- <arquivo> --telefone <tel> [--acao …] [--processo …]` | Processa um documento local (resumir/salvar/ambos) pelo caminho real. | Validar documentos (12A) sem chip. |
 | `npm run doc:reindex [-- --lote N]` | **Backfill** dos embeddings de documentos sem vetor (idempotente; back-office). | Preparar a busca semântica em acervo já existente (12B). |
 | `npm run doc:search -- --telefone <tel> "<referência>"` | Busca documentos pelo caminho real (exata + semântica; link assinado). | Validar a busca e o **isolamento** (12B) sem chip. |
+| `npm run doc:doctor` | Diagnóstico (somente leitura) dos pré-requisitos do fluxo: banco, colunas/migração, pgvector, bucket. | Antes de rodar o fluxo de documentos; achar o que falta. |
+| `npm run doc:bucket` | Cria o bucket privado `DOCUMENTOS_BUCKET` (idempotente). | Primeiro uso do fluxo de documentos. |
 | `npm run seed:assinante -- <tel>` | Cria/atualiza um assinante de teste (admin). | Destravar testes sem onboarding. |
 | `npm run reset:assinante -- <tel>` | Remove o assinante (cascata) + limpa onboarding. | Refazer o fluxo de número novo. |
 | `npm run trial:expire -- <tel>` | Vence o trial (coloca `trial_fim` no passado). | Testar o bloqueio pós-trial. |

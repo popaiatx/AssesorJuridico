@@ -164,6 +164,7 @@ function registerWhatsapp(app: FastifyInstance): void {
         store: docStore,
         llm,
         ...(embeddings ? { embeddings } : {}),
+        maxBytes: config.DOCUMENTOS_MAX_MB * 1024 * 1024,
         resolveProcessoId: resolveProcessoIdByCnj,
         logger: app.log,
       });

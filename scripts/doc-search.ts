@@ -84,7 +84,7 @@ try {
     console.log('─'.repeat(60));
   }
 } catch (err) {
-  console.error('Falha na busca:', err);
+  console.error('Falha na busca:', err instanceof Error ? err.message : err);
   process.exitCode = 1;
 } finally {
   await closeDatabase().catch(() => {});

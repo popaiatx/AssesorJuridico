@@ -61,7 +61,7 @@ try {
   }
   console.log(`\nConcluído: ${total} embedding(s) gravados${falhas ? `, ${falhas} falha(s)` : ''}.`);
 } catch (err) {
-  console.error('Falha no backfill:', err);
+  console.error('Falha no backfill:', err instanceof Error ? err.message : err);
   process.exitCode = 1;
 } finally {
   await closeDatabase().catch(() => {});

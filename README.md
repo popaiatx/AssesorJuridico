@@ -451,11 +451,15 @@ não re-resume nem reprocessa.
 
 ### Testar pela CLI (sem chip)
 
-Pré-requisitos: como no 12A (bucket privado, `.env`, assinante de teste). Para a
-**semântica**, também `EMBEDDINGS_*`. Antes da primeira busca em acervo já existente,
-rode o backfill de embeddings:
+Pré-requisitos: como no 12A (`.env`, assinante de teste). Para a **semântica**, também
+`EMBEDDINGS_*`. Comece conferindo o ambiente e criando o bucket:
 
 ```bash
+# (0) Diagnóstico: migrações aplicadas? coluna embedding? pgvector? bucket existe?
+npm run doc:doctor
+# Cria o bucket privado de documentos se faltar (idempotente):
+npm run doc:bucket
+
 # (1) Backfill: gera o embedding dos documentos que ainda não têm (idempotente).
 npm run doc:reindex
 # ou em lotes maiores:
@@ -707,7 +711,9 @@ curl localhost:3000/health/ready  # confere o banco (503 se indisponível)
 Scripts: `dev`, `build`, `start`, `typecheck`, `lint`, `format`, `test`,
 `seed:assinante`, `reset:assinante`, `trial:expire`, `ingest:corpus`,
 `sync:corpus`, `ask:rag`, `send:lembretes`, `doc:process`, `doc:reindex`,
-`doc:search`, `db:start`, `db:reset`, `db:migration`, `db:push`.
+`doc:search`, `doc:doctor` (diagnóstico de pré-requisitos do fluxo de documentos),
+`doc:bucket` (cria o bucket privado), `db:start`, `db:reset`, `db:migration`,
+`db:push`.
 
 ## Segurança e isolamento multi-tenant (essencial)
 

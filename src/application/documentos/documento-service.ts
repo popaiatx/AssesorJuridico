@@ -44,10 +44,17 @@ export interface DocumentoServiceDeps {
   /** Embeddings p/ a busca semântica do 12B. Ausente → guarda sem embedding
    *  (achável só pela busca exata); o backfill (doc:reindex) preenche depois. */
   embeddings?: EmbeddingsPort;
+  /** Tamanho máximo aceito por documento (bytes). Acima disso, recusa com aviso
+   *  ANTES de subir/extrair. Ausente → sem limite na aplicação. */
+  maxBytes?: number;
   resolveProcessoId: (assinanteId: string, numeroCnj: string) => Promise<string | null>;
   extrair?: (bytes: Uint8Array, filename: string, ct: string | null) => Promise<ExtracaoResultado>;
   novoId?: () => string;
   logger: Logger;
+}
+
+function mb(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function sanitize(nome: string): string {
@@ -59,6 +66,16 @@ export class DocumentoService {
 
   private extrair(e: DocumentoEntrada): Promise<ExtracaoResultado> {
     return (this.deps.extrair ?? extrairTexto)(e.bytes, e.filename, e.contentType);
+  }
+
+  /** Retorna aviso se o arquivo excede o limite; null se estiver ok. */
+  private excedeLimite(bytes: Uint8Array): string | null {
+    const max = this.deps.maxBytes;
+    if (!max || bytes.length <= max) return null;
+    return (
+      `📎 Esse arquivo é grande demais (${mb(bytes.length)}; o limite é ${mb(max)}). ` +
+      'Envie uma versão menor ou comprima o arquivo.'
+    );
   }
 
   private async resolverProcesso(
@@ -78,6 +95,8 @@ export class DocumentoService {
     entrada: DocumentoEntrada,
     acao: DocAcao,
   ): Promise<string> {
+    const grande = this.excedeLimite(entrada.bytes);
+    if (grande) return grande;
     const ex = await this.extrair(entrada);
 
     if (acao === 'resumir') {
@@ -111,6 +130,8 @@ export class DocumentoService {
 
   /** Ação desconhecida: sobe o arquivo (staging) e pergunta 1/2/3. */
   async receber(assinanteId: string, entrada: DocumentoEntrada): Promise<string> {
+    const grande = this.excedeLimite(entrada.bytes);
+    if (grande) return grande;
     const id = (this.deps.novoId ?? randomUUID)();
     const nome = entrada.filename || 'arquivo';
     const path = `${assinanteId}/${id}/${sanitize(nome)}`;

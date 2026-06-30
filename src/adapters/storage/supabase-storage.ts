@@ -16,13 +16,25 @@ function bucket() {
   return getAdminClient().storage.from(config.DOCUMENTOS_BUCKET);
 }
 
+/** Traduz erros do Storage em mensagem acionável (bucket ausente é o mais comum). */
+function explicaErroStorage(msg: string): string {
+  if (/bucket not found/i.test(msg)) {
+    return (
+      `o bucket "${config.DOCUMENTOS_BUCKET}" não existe. Crie-o (privado) no painel ` +
+      'do Supabase › Storage, ou rode "npm run doc:bucket". (' +
+      'configure o nome em DOCUMENTOS_BUCKET).'
+    );
+  }
+  return msg;
+}
+
 export const supabaseStorage: StoragePort = {
   async putDocument(input: PutDocumentInput): Promise<{ storageRef: string }> {
     const { error } = await bucket().upload(input.path, Buffer.from(input.content), {
       contentType: input.contentType,
       upsert: true,
     });
-    if (error) throw new Error(`Falha ao subir documento: ${error.message}`);
+    if (error) throw new Error(`Falha ao subir documento: ${explicaErroStorage(error.message)}`);
     return { storageRef: input.path };
   },
 

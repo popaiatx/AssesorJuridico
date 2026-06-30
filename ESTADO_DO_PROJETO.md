@@ -179,7 +179,19 @@
   filtro `where assinante_id` **embutido na query** (exata e semântica), antes do
   `ILIKE`/`<=>`; **RLS force** backstop. CLIs `npm run doc:reindex` + `npm run
   doc:search`. Isolamento provado por testes (2 tenants) **e em Postgres real (RLS,
-  pgvector)**. **282 testes verdes.**
+  pgvector)**. Validado **ponta a ponta de verdade** (não só fakes) contra Supabase
+  real: adicionar (PDF/DOCX → chaves+embedding; imagem → sem_texto, sem inventar),
+  backfill idempotente, busca exata/nome/semântica e isolamento A×B (A nunca vê B,
+  nem por assunto parecido nem por número só-de-B; acesso por id de outro dono
+  barrado via RLS → URL nunca gerada). Robustez: limite de tamanho
+  (`DOCUMENTOS_MAX_MB`, recusa antes de subir), formato não suportado/escaneado
+  guardado com aviso de ponto cego, e mensagens claras de pré-requisito (bucket
+  ausente etc.). Ferramentas: `doc:doctor` (diagnóstico) e `doc:bucket` (cria o
+  bucket privado). **284 testes verdes.**
+- **Fix Node 20 / WebSocket.** O `@supabase/supabase-js` construía um RealtimeClient
+  que exigia WebSocket nativo (só no Node 22+), quebrando todos os scripts de banco
+  no Node 20. `admin.ts` passou a desligar o Realtime (transport no-op) — roda no
+  Node 20.18+ e 22+, sem nova dependência. Ver README › "Versão do Node".
 
 ## Decisões técnicas-chave
 
@@ -281,10 +293,11 @@
 - **Validar em produção** (acumulado): Cérebro 1, pagamento sandbox (6B), RAG.
 - **Onboarding — verificação real da inscrição na OAB** contra fonte externa
   (removida do fluxo obrigatório; pode virar opção futura).
-- **Documentos:** **busca (12B) — FEITA**, validável por `doc:reindex` + `doc:search`.
-  PENDENTE: **OCR** de imagem/PDF escaneado (ponto cego da busca); criar o **bucket
-  `documentos`** no Supabase; **download de mídia pelo WhatsApp** (código pronto, valida
-  com o chip). Eventual: repedir o resumo a partir de um resultado da busca.
+- **Documentos:** **busca (12B) — FEITA e validada de ponta a ponta** (`doc:doctor` →
+  `doc:bucket` → `doc:process` → `doc:reindex` → `doc:search`). O **bucket** se cria com
+  `npm run doc:bucket` (já criado no projeto atual). PENDENTE: **OCR** de imagem/PDF
+  escaneado (ponto cego da busca); **download de mídia pelo WhatsApp** (código pronto,
+  valida com o chip). Eventual: repedir o resumo a partir de um resultado da busca.
 - **WhatsApp:** **download de mídia** (mídia recebida hoje → placeholder até o chip);
   template aprovado na Meta.
 - **Fila durável do webhook** (ack rápido + worker) — caminho de escala.

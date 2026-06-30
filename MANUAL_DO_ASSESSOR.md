@@ -84,6 +84,12 @@ datas, assunto) para você **encontrar o documento depois**.
 - Você manda um contrato com *"guarda no processo 0001234-…"* → ele guarda vinculado ao processo.
 - Se for **foto ou PDF escaneado** (sem texto), ele avisa com honestidade: guarda o arquivo, mas diz que **não conseguiu ler o conteúdo** — então esse documento **não poderá ser achado por conteúdo** depois (só por nome/data). Ele nunca "inventa" o que não leu.
 
+**Bom saber:**
+- **Tipos que ele lê:** PDF com texto, Word (.docx) e texto (.txt). Outros tipos ele
+  guarda, mas avisa que não conseguiu ler o conteúdo.
+- **Tamanho:** há um limite por arquivo (ajustável). Acima dele, ele avisa com
+  clareza e pede uma versão menor — em vez de falhar sem explicar.
+
 ### 6. Encontrar um documento guardado (busca)
 **O que faz:** você pede um documento **sem lembrar o nome do arquivo** — por um detalhe
 **exato** (um número de protocolo/processo, o nome de uma pessoa, um trecho) **ou** por

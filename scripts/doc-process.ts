@@ -59,6 +59,7 @@ const { createLlmAdapter } = await import('../src/adapters/llm/factory.js');
 const { getEmbeddingsConfig } = await import('../src/adapters/embeddings/config.js');
 const { createEmbeddingsAdapter } = await import('../src/adapters/embeddings/factory.js');
 const { DocumentoService } = await import('../src/application/documentos/documento-service.js');
+const { config } = await import('../src/infra/config/index.js');
 const { closeDatabase } = await import('../src/infra/db/tenant.js');
 
 try {
@@ -79,6 +80,7 @@ try {
       },
       llm: createLlmAdapter(requireLlmConfig()),
       ...(embCfg ? { embeddings: createEmbeddingsAdapter(embCfg) } : {}),
+      maxBytes: config.DOCUMENTOS_MAX_MB * 1024 * 1024,
       resolveProcessoId: resolveProcessoIdByCnj,
       logger: { error: (o, m) => console.error('[doc][erro]', m ?? '', o) },
     });
@@ -98,7 +100,8 @@ try {
     console.log('─'.repeat(60));
   }
 } catch (err) {
-  console.error('Falha ao processar documento:', err);
+  // Mensagem limpa (não despeja stack): erros conhecidos já vêm explicados.
+  console.error('Falha ao processar documento:', err instanceof Error ? err.message : err);
   process.exitCode = 1;
 } finally {
   await closeDatabase().catch(() => {});

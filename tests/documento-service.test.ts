@@ -170,6 +170,35 @@ describe('DocumentoService — ação direta', () => {
   });
 });
 
+describe('DocumentoService — limite de tamanho (robustez)', () => {
+  it('arquivo acima do limite: recusa com aviso, NÃO sobe nem extrai', async () => {
+    const storage = new FakeStorage();
+    const store = new FakeStore();
+    let extraiu = false;
+    const service = new DocumentoService({
+      storage, store, llm: new FakeLlm(),
+      maxBytes: 10, // 10 bytes
+      resolveProcessoId: () => Promise.resolve(null),
+      extrair: () => { extraiu = true; return extOk(); },
+      novoId: () => 'doc1',
+      logger: { error: () => {} },
+    });
+    const grande = { bytes: new Uint8Array(50), filename: 'grande.pdf', contentType: 'application/pdf' };
+    const r = await service.processarComAcao('A', grande, 'salvar');
+    expect(r.toLowerCase()).toContain('grande demais');
+    expect(extraiu).toBe(false); // nem tentou extrair
+    expect(storage.files.size).toBe(0); // nada subiu
+    expect(store.data.get('A') ?? []).toHaveLength(0); // nada gravado
+  });
+
+  it('dentro do limite: processa normalmente', async () => {
+    const { service, store } = build();
+    // build() não define maxBytes → sem limite
+    await service.processarComAcao('A', entrada(), 'salvar');
+    expect(store.data.get('A')).toHaveLength(1);
+  });
+});
+
 describe('DocumentoService — embedding na escrita (12B)', () => {
   it('ok + embeddings: gera o embedding a partir do busca_texto e grava', async () => {
     const emb = new FakeEmbeddings();
