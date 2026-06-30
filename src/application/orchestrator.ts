@@ -32,6 +32,10 @@ import type { InboundMessage } from '../core/ports/whatsapp.js';
 /** Resolve a identidade do assinante a partir do telefone (pré-tenant, R4). */
 export type ResolveAssinante = (phone: string) => Promise<string | null>;
 
+const MEDIA_PLACEHOLDER =
+  '📎 Recebi seu arquivo, mas o processamento de documentos ainda está em ' +
+  'desenvolvimento. Em breve poderei lê-lo e guardá-lo. 🚧';
+
 /** Handler para onde o porteiro desvia quando o acesso está bloqueado. */
 export interface BlockedHandler {
   handle(ctx: MessageContext): Promise<HandlerResult>;
@@ -53,6 +57,18 @@ export interface OrchestratorDeps {
   gate?: SubscriptionGate;
   /** Handler de pagamento, acionado quando o porteiro bloqueia. */
   paymentRequiredHandler?: BlockedHandler;
+  /**
+   * Decisão sobre documento pendente (Passo 12A). Se devolver texto, a mensagem é a
+   * resposta 1/2/3 a um documento aguardando decisão → responde sem classificar. Null
+   * = não há documento pendente; segue o fluxo normal. Sem a dep, fluxo idêntico.
+   */
+  documentDecision?: (assinanteId: string, text: string) => Promise<string | null>;
+  /**
+   * Documento recebido (mídia). Recebe os bytes (baixa internamente) e responde
+   * (resumir/salvar/perguntar). Roda APÓS o porteiro (um bloqueado não processa
+   * arquivo). Sem a dep → placeholder honesto.
+   */
+  incomingDocument?: (assinanteId: string, message: InboundMessage) => Promise<string>;
   /** Memória de conversa (opcional). Sem ela, o fluxo é idêntico ao atual. */
   memory?: ConversationMemoryStore;
   /** Config da memória; sem ela (ou enabled=false), a memória fica inativa. */
@@ -87,6 +103,24 @@ export class Orchestrator {
         });
         await this.record(assinanteId, 'assinatura', result);
         return { assinanteId, intent: 'assinatura', ambiguous: false, replyText: result.replyText };
+      }
+    }
+
+    // Mídia (documento): tratada após o porteiro. Sem handler → placeholder honesto.
+    if (message.media) {
+      const reply = this.deps.incomingDocument
+        ? await this.deps.incomingDocument(assinanteId, message)
+        : MEDIA_PLACEHOLDER;
+      await this.record(assinanteId, 'outro');
+      return { assinanteId, intent: 'outro', ambiguous: false, replyText: reply };
+    }
+
+    // Documento aguardando decisão? A resposta 1/2/3 resolve antes de classificar.
+    if (this.deps.documentDecision) {
+      const docReply = await this.deps.documentDecision(assinanteId, message.text);
+      if (docReply !== null) {
+        await this.record(assinanteId, 'outro');
+        return { assinanteId, intent: 'outro', ambiguous: false, replyText: docReply };
       }
     }
 

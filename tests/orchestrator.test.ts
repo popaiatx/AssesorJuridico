@@ -58,6 +58,43 @@ describe('Orchestrator', () => {
     });
   });
 
+  it('documento pendente: a resposta 1/2/3 é resolvida antes de classificar', async () => {
+    const calls: Intent[] = [];
+    const classifier = clear('consulta_dados');
+    const orch = new Orchestrator({
+      resolveAssinante: () => Promise.resolve('11111111-1111-1111-1111-111111111111'),
+      classifier,
+      registry: spyRegistry(calls),
+      interactionLog: new InMemoryInteractionLog(),
+      documentDecision: (_id, text) => Promise.resolve(text === '2' ? '📎 Guardei no seu acervo.' : null),
+    });
+
+    const r = await orch.handleInboundMessage(makeMessage('2'));
+    expect(r.replyText).toContain('Guardei');
+    expect(calls).toEqual([]); // não classificou nem roteou
+    expect(classifier.calls).toBe(0);
+
+    // Sem documento pendente (null) → segue o fluxo normal e classifica.
+    const r2 = await orch.handleInboundMessage(makeMessage('quais meus processos'));
+    expect(calls).toEqual(['consulta_dados']);
+    expect(r2.intent).toBe('consulta_dados');
+  });
+
+  it('mídia: usa incomingDocument quando configurado; senão placeholder', async () => {
+    const calls: Intent[] = [];
+    const orch = new Orchestrator({
+      resolveAssinante: () => Promise.resolve('11111111-1111-1111-1111-111111111111'),
+      classifier: clear('consulta_dados'),
+      registry: spyRegistry(calls),
+      interactionLog: new InMemoryInteractionLog(),
+      incomingDocument: () => Promise.resolve('Recebi seu documento. O que você quer fazer?'),
+    });
+    const msg = { ...makeMessage(''), media: { type: 'document' as const, mediaId: 'm1' } };
+    const r = await orch.handleInboundMessage(msg);
+    expect(r.replyText).toContain('O que você quer fazer');
+    expect(calls).toEqual([]); // mídia não vai a um cérebro
+  });
+
   it('ambíguo → PERGUNTA em linguagem natural, sem acionar handler de negócio', async () => {
     const calls: Intent[] = [];
     const classifier = new FakeClassifier({

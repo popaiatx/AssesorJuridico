@@ -44,6 +44,20 @@ import {
 import { Cerebro2Handler } from '../../application/cerebro2/cerebro2-handler.js';
 import { supabaseCorpusStore } from '../../adapters/corpus/supabase-corpus-store.js';
 import { conversationMemoryStore } from '../db/conversation-memory-store.js';
+import { normalizeText } from '../../core/domain/validators.js';
+import type { InboundMessage } from '../../core/ports/whatsapp.js';
+import { supabaseStorage } from '../../adapters/storage/supabase-storage.js';
+import { WhatsappMediaDownloader } from '../../adapters/whatsapp/whatsapp-media-downloader.js';
+import { DocumentoService } from '../../application/documentos/documento-service.js';
+import { DocumentHandler } from '../../application/documentos/document-handler.js';
+import { resolveProcessoIdByCnj } from '../db/cerebro1-store.js';
+import {
+  documentoPendenteDecisao,
+  getDocumentoById,
+  gravarConteudoDocumento,
+  inserirDocumento,
+  removerDocumento,
+} from '../db/documentos-store.js';
 import { getEmbeddingsConfig } from '../../adapters/embeddings/config.js';
 import { createEmbeddingsAdapter } from '../../adapters/embeddings/factory.js';
 import { getWhatsappConfig } from '../../adapters/whatsapp/config.js';
@@ -91,6 +105,8 @@ function registerWhatsapp(app: FastifyInstance): void {
   const overrides: Partial<Record<Intent, IntentHandler>> = { onboarding: onboardingHandler };
 
   let classifier: IntentClassifier = keyword;
+  let documentDecision: ((id: string, text: string) => Promise<string | null>) | undefined;
+  let incomingDocument: ((id: string, message: InboundMessage) => Promise<string>) | undefined;
 
   if (llmCfg) {
     const llm = createLlmAdapter(llmCfg);
@@ -124,6 +140,44 @@ function registerWhatsapp(app: FastifyInstance): void {
       app.log.info(`Embeddings habilitados (${embCfg.provider}/${embCfg.model}) — Cérebro 2 ativo`);
     } else {
       app.log.warn('Embeddings não configurados — Cérebro 2 (RAG) inativo (placeholder)');
+    }
+
+    // Documentos (Passo 12A): ler/resumir/guardar com chaves. Precisa do Storage
+    // (service_role) p/ o ARQUIVO; "de quem é" continua 100% via tabela/RLS.
+    if (config.SUPABASE_SERVICE_ROLE_KEY) {
+      const docStore = {
+        inserir: inserirDocumento,
+        gravarConteudo: gravarConteudoDocumento,
+        getById: getDocumentoById,
+        pendenteDecisao: documentoPendenteDecisao,
+        remover: removerDocumento,
+      };
+      const docService = new DocumentoService({
+        storage: supabaseStorage,
+        store: docStore,
+        llm,
+        resolveProcessoId: resolveProcessoIdByCnj,
+        logger: app.log,
+      });
+      const docHandler = new DocumentHandler({ service: docService, store: docStore });
+      documentDecision = (id, text) => docHandler.handleDecision(id, normalizeText(text));
+      incomingDocument = async (id, message) => {
+        const wcfg = getWhatsappConfig();
+        const mediaId = message.media?.mediaId;
+        if (!wcfg || !mediaId) {
+          return '📎 Recebi seu arquivo, mas o canal de mídia ainda não está pronto. 🚧';
+        }
+        const midia = await new WhatsappMediaDownloader(wcfg).download(mediaId);
+        return docHandler.handleIncoming(id, {
+          bytes: midia.bytes,
+          filename: message.media?.filename ?? midia.filename ?? 'arquivo',
+          contentType: midia.contentType,
+          legenda: message.text || null,
+        });
+      };
+      app.log.info('Documentos (12A) ativos — leitura/resumo/guarda');
+    } else {
+      app.log.warn('SUPABASE_SERVICE_ROLE_KEY ausente — documentos (12A) inativos (placeholder)');
     }
   } else {
     app.log.warn('LLM não configurado — usando classificador por palavras-chave');
@@ -162,6 +216,9 @@ function registerWhatsapp(app: FastifyInstance): void {
     // Porteiro: bloqueia tudo após o trial (fail-closed) e desvia para pagamento.
     gate: new SupabaseSubscriptionGate(),
     paymentRequiredHandler,
+    // Documentos (Passo 12A): mídia recebida + resposta 1/2/3 (após o porteiro).
+    ...(documentDecision ? { documentDecision } : {}),
+    ...(incomingDocument ? { incomingDocument } : {}),
     // Memória de conversa (Passo 9): só interpreta a mensagem; nunca é fonte.
     memory: conversationMemoryStore,
     memoriaConfig: {

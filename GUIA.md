@@ -42,6 +42,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | **Cérebro 2 — RAG jurídico + sync** | Responde dúvidas jurídicas só com fonte recuperada do corpus (citação validada); corpus local mantido fresco por sincronização. |
 | **Memória de conversa** | Mantém o fio do assunto entre mensagens (resolve "dela", "o artigo seguinte") só para interpretar; nunca é fonte; por tenant, com janela e expiração. |
 | **Lembrete proativo** | Job agendado avisa o advogado antes de audiências/prazos (24h e 1h antes), idempotente, no fuso de Brasília, via template aprovado. |
+| **Documentos (12A)** | Recebe arquivo, decide (resumir/salvar/ambos), lê o texto e guarda com informações-chave (para achar depois); bucket privado isolado por tenant. |
 
 ---
 
@@ -102,6 +103,14 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Testar — automatizado:** `tests/send-lembretes.test.ts` (envia+marca, idempotência, resiliência, dry-run), `tests/lembrete-format.test.ts` (fuso/texto), seleção SQL validada em Postgres.
 - **Testar — manual SEM chip (CLI):** `npm run send:lembretes -- --dry-run` (e `--now "<ISO>"` para simular o horário). Lista o que enviaria, sem enviar/marcar. **Envio real e aprovação do template na Meta = PENDENTE (depende do chip).**
 
+### 9. Documentos (12A)
+- **Faz:** ao receber um arquivo, decide (resumir/salvar/ambos — por legenda ou pergunta 1/2/3); lê o texto e, ao salvar, **sempre** extrai informações-chave (tipo/partes/números/datas/assunto/resumo) para achar depois (12B). PDF-imagem/foto → avisa (sem OCR) e marca `sem_texto`. Sem inventar chaves.
+- **Arquivos:** `src/application/documentos/` (serviço, handler, extrair-chaves, resumir), `src/core/domain/documentos/` (formato, decisão), `src/adapters/documentos/extractors.ts`, `src/adapters/storage/supabase-storage.ts`, `src/infra/db/documentos-store.ts`, `MediaDownloader` (WhatsApp), migração `0023`.
+- **Config (.env):** `DOCUMENTOS_BUCKET`, `DOCUMENTOS_URL_TTL_SEC`, `DOCUMENTOS_MAX_MB`, `SUPABASE_SERVICE_ROLE_KEY` (Storage), `LLM_*`.
+- **Sigilo:** bucket privado, caminho `${assinante}/${id}/…`; posse decidida na tabela (RLS); URL assinada curta só para o dono.
+- **Testar — automatizado:** `tests/documentos-extract.test.ts`, `tests/documentos-ia.test.ts`, `tests/documento-service.test.ts` (inclui **isolamento de arquivo** com 2 assinantes).
+- **Testar — manual SEM chip (CLI):** `npm run doc:process -- <arquivo> --telefone <tel> [--acao resumir|salvar|ambos] [--processo <CNJ>]`. **Recebimento pelo WhatsApp (download da mídia) = PENDENTE (chip).**
+
 ---
 
 ## Comandos úteis (scripts npm)
@@ -119,6 +128,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | `npm run ask:rag -- --conversa "p1" "p2"` | Roda perguntas em sequência com **memória** ativa (continuidade e mudança de assunto). | Validar a **memória de conversa** sem chip. |
 | `npm run send:lembretes -- --dry-run [--now "<ISO>"]` | Lista os lembretes que enviaria (sem enviar/marcar); `--now` simula o horário. | Validar a lógica do **lembrete** sem chip. |
 | `npm run send:lembretes` | Envia os lembretes devidos (real; precisa WHATSAPP_* + template aprovado). | É o que o Railway Cron roda a cada 15 min. |
+| `npm run doc:process -- <arquivo> --telefone <tel> [--acao …] [--processo …]` | Processa um documento local (resumir/salvar/ambos) pelo caminho real. | Validar documentos (12A) sem chip. |
 | `npm run seed:assinante -- <tel>` | Cria/atualiza um assinante de teste (admin). | Destravar testes sem onboarding. |
 | `npm run reset:assinante -- <tel>` | Remove o assinante (cascata) + limpa onboarding. | Refazer o fluxo de número novo. |
 | `npm run trial:expire -- <tel>` | Vence o trial (coloca `trial_fim` no passado). | Testar o bloqueio pós-trial. |
@@ -145,6 +155,9 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | Memória de conversa | ✅ | ✅ validada pela CLI (`--conversa`) | **Não** — valida pela CLI |
 | Lembrete proativo — lógica/seleção/idempotência | ✅ | ✅ validável por `--dry-run` | **Não** — valida em dry-run |
 | Lembrete proativo — envio real + template Meta | ✅ (código) | ❌ PENDENTE | **Sim** (chip + aprovação) |
+| Documentos (12A) — ler/resumir/guardar + chaves | ✅ | ✅ validável por `doc:process` | **Não** — valida pela CLI (bucket privado no Supabase) |
+| Documentos — receber pelo WhatsApp (download da mídia) | ✅ (código) | ❌ PENDENTE | **Sim** (chip) |
+| Documentos — PDF-imagem/foto (OCR) | ❌ Ainda não | — | Avisa e marca `sem_texto` (ponto cego da busca) |
 | Migrações 0019 (sync) / 0020 (memória) / 0021 (lembrete) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |
 
 **Resumo do que dá para validar JÁ, sem chip:** (1) **Cérebro 2** ponta a ponta pela

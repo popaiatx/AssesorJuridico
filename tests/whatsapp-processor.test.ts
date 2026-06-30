@@ -76,12 +76,12 @@ describe('WhatsappWebhookProcessor', () => {
     expect(dedup.doneCalls).toEqual(['wamid.dup']); // concluiu 1x
   });
 
-  it('mídia → placeholder honesto, sem acionar o orquestrador', async () => {
+  it('mídia → orquestrador trata (placeholder honesto quando documentos não configurados)', async () => {
     const { processor, whatsapp, handlerCalls } = build([mediaMsg('wamid.media')]);
 
     await processor.process(Buffer.from('{}'));
 
-    expect(handlerCalls).toEqual([]); // orquestrador não chamado
+    expect(handlerCalls).toEqual([]); // não roteia a um cérebro: o orquestrador responde a mídia
     expect(whatsapp.sent).toHaveLength(1);
     expect(whatsapp.sent[0]!.text).toContain('Recebi seu arquivo');
   });

@@ -73,7 +73,19 @@ Brasília. Ex.: *"🔔 Lembrete: audiência do processo 12345 (cliente Gabriel M
 amanhã às 14:00 — aviso automático do seu assessor."* Você não precisa pedir; é
 automático ao agendar.
 
-### 5. Cadastro e acesso
+### 5. Receber e organizar documentos
+**O que faz:** você manda um arquivo (PDF, Word, texto) e ele **resume, guarda, ou os
+dois** — e, ao guardar, sempre anota as **informações-chave** (tipo, partes, números,
+datas, assunto) para você **encontrar o documento depois** (a busca em si chega no
+próximo passo).
+
+**Exemplos:**
+- Você manda um PDF com a legenda *"resume isso"* → ele responde com o resumo.
+- Você manda um arquivo **sem dizer nada** → ele pergunta: *"O que você quer fazer? 1 - Resumir / 2 - Salvar / 3 - Resumir e salvar"* e age conforme a sua resposta.
+- Você manda um contrato com *"guarda no processo 0001234-…"* → ele guarda vinculado ao processo.
+- Se for **foto ou PDF escaneado** (sem texto), ele avisa com honestidade: guarda o arquivo, mas diz que **não conseguiu ler o conteúdo** — então esse documento **não poderá ser achado por conteúdo** depois (só por nome/data). Ele nunca "inventa" o que não leu.
+
+### 6. Cadastro e acesso
 **O que faz:** quem é novo simplesmente **manda a primeira mensagem** no WhatsApp. O
 assessor dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pessoa ganha
 **3 dias de teste grátis**. Depois do teste, para continuar usando é preciso
@@ -84,7 +96,10 @@ assessor dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pessoa
 ## Parte 3 — O que ele ainda NÃO faz (e o que vem por aí)
 
 - **Entender áudios** (mensagem de voz) — *(planejado, deixado para o final)*
-- **Ler e resumir documentos** (PDF de intimação, contrato) — *(planejado)*
+- **Encontrar documentos por conteúdo** (achar por um nome, pedaço de número ou
+  assunto, sem lembrar o arquivo) — *(é o próximo passo, 12B; o 12A já guarda as
+  informações-chave que tornam isso possível)*.
+- **Ler imagens / PDF escaneado** (OCR) — hoje ele avisa que não consegue; *(planejado)*.
 - **Jurisprudência** (decisões de tribunais, súmulas) no acervo de consulta — hoje só
   legislação; jurisprudência virá por um provedor especializado. *(em breve)*
 - **Andamento processual** (acompanhar movimentações do processo nos tribunais e
@@ -127,7 +142,9 @@ modelo de mensagem junto à Meta).
 - 💡 **Ficha do cliente** (histórico, contatos, processos) — visão 360º de cada cliente.
 
 ### Produção de documentos
-- ▶ **Ler e resumir documentos (PDF)** — extrair o essencial de uma intimação/contrato.
+- ✓ **Receber, ler e resumir documentos (PDF/Word/texto)** — extrair o essencial e guardar com informações-chave.
+- ▶ **Encontrar documentos por conteúdo** (busca) — achar sem lembrar o nome do arquivo (12B).
+- ▶ **OCR (ler imagens / PDF escaneado)** — hoje avisa que não consegue.
 - ▶ **Sugerir prazo a partir de uma intimação** — da leitura à agenda, automático.
 - ▶ **Rascunho de peças** (com revisão obrigatória, sem citar o que não foi verificado) — acelerar a redação.
 - 💡 **Modelos de petições/contratos** preenchidos com os dados do caso — produtividade.
@@ -166,8 +183,9 @@ modelo de mensagem junto à Meta).
 | Lembretes automáticos (24h e 1h) | ✅ Sim (lógica pronta) | **Sim** | Envio real depende do chip + aprovação do modelo na Meta |
 | Cadastro + 3 dias de teste + assinatura | ✅ Sim | Sim | Fluxo real acontece pelo WhatsApp |
 | Editar/cancelar compromissos; editar/arquivar processos | ✅ Sim | Sim | Confirma mostrando o registro real; remarcar reprograma lembretes; processo é arquivado, não apagado |
+| Receber/ler/resumir/guardar documentos (PDF/Word/texto) | ✅ Sim | Recebimento pelo Zap depende do chip | Guarda com informações-chave; PDF-imagem avisa que não leu |
+| Encontrar documentos por conteúdo (busca) | ❌ Ainda não | — | Próximo passo (12B) |
 | Entender áudios | ❌ Ainda não | — | Planejado (por último) |
-| Ler/resumir documentos (PDF) | ❌ Ainda não | — | Planejado |
 | Jurisprudência (decisões/súmulas) | ❌ Ainda não | — | Em breve (provedor especializado) |
 | Andamento processual (tribunais) | ❌ Ainda não | — | Planejado |
 | Financeiro/honorários | ❌ Ainda não | — | Planejado |

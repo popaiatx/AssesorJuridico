@@ -24,10 +24,12 @@
   **dry-run** sem chip. Concluído também o **Passo 11 — editar/remover no Cérebro 1**
   (editar/cancelar compromisso, editar/arquivar processo) com resolução de alvo
   escopada por tenant, desambiguação numerada, confirmação reforçada na remoção e
-  recálculo de lembretes na remarcação. Falta **agendar os Crons no Railway** (sync
-  semanal + lembretes 15 min), **aprovar o template `lembrete_generico` na Meta** e
-  **validar pelo WhatsApp** (tudo depende do chip).
-  Próximo: **jurisprudência** (agregador pago) ou **Cérebro 3 (tribunais)**.
+  recálculo de lembretes na remarcação. Concluído também o **Passo 12A — documentos**
+  (receber/decidir/ler/resumir/guardar com informações-chave; bucket privado isolado
+  por tenant; validável pela CLI `doc:process`). Falta **agendar os Crons no Railway**
+  (sync semanal + lembretes 15 min), **aprovar o template `lembrete_generico` na Meta**,
+  **criar o bucket `documentos`** e **validar pelo WhatsApp** (download de mídia, chip).
+  Próximo: **12B — busca de documentos**; depois jurisprudência ou Cérebro 3.
   Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B) — pelo chip.
 
 ## O que já está pronto
@@ -149,6 +151,16 @@
   `lembretes_enviados`** (migração 0022 = grant delete). Remover compromisso = delete
   real (cascade limpa enviados); processo = **arquivar** (status='arquivado', sem
   exclusão destrutiva). **235 testes verdes.**
+- **Passo 12A — gestão de documentos (receber/decidir/ler/resumir/guardar).** Migração
+  0023 (documentos: `processo_id` opcional + `chaves` jsonb/`resumo`/`extracao_status`/
+  `busca_texto`/`status`/`legenda`). Decisão por legenda ("resume"/"salva") ou pergunta
+  1/2/3 (estado = linha `aguardando_decisao`). Extractors `.txt`/PDF-texto/`.docx`
+  (pdf-parse/mammoth); PDF-imagem/foto → `sem_texto` + aviso (sem OCR). Ao guardar,
+  **sempre** extrai chaves (LLM, **sem inventar**: ausente fica vazio) + `busca_texto`
+  (alimenta o 12B); resumo map-reduce p/ doc longo. Storage real (bucket privado,
+  caminho `${assinante}/${id}/…`, URL assinada curta); **isolamento do arquivo**: posse
+  decidida na tabela (RLS), service_role só toca o arquivo. CLI `npm run doc:process`.
+  `MediaDownloader` (WhatsApp) pronto — download depende do chip. **265 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -217,6 +229,11 @@
   SECURITY DEFINER (sem service_role), **marca-após-sucesso** + `unique` + advisory
   lock (rodar 2x = 1 envio). Compara em **UTC**, exibe em **BRT**; não dispara passado;
   grace recupera downtime. Proativo → **template** (envio real depende de aprovação).
+- **Documentos: isolamento do ARQUIVO por construção.** A posse é decidida na tabela
+  `documentos` (RLS, withTenant); só com a linha do dono se obtém o `storageRef` →
+  só então se baixa/gera URL. service_role toca **só o arquivo**; caminho é sempre
+  `${assinante}/${id}/…` (identidade, nunca do usuário). **Chaves nunca inventadas**
+  (ausente = vazio); sem texto (escaneado) → guarda e avisa o ponto cego da busca.
 
 ## PENDENTE (explícito)
 
@@ -245,7 +262,10 @@
 - **Validar em produção** (acumulado): Cérebro 1, pagamento sandbox (6B), RAG.
 - **Onboarding — verificação real da inscrição na OAB** contra fonte externa
   (removida do fluxo obrigatório; pode virar opção futura).
-- **WhatsApp:** **download de mídia + Storage** (mídia hoje só placeholder);
+- **Documentos:** **12B — busca** (achar por referência vaga/listar/repedir resumo);
+  **OCR** de imagem/PDF escaneado; criar o **bucket `documentos`** no Supabase;
+  **download de mídia pelo WhatsApp** (código pronto, valida com o chip).
+- **WhatsApp:** **download de mídia** (mídia recebida hoje → placeholder até o chip);
   template aprovado na Meta.
 - **Fila durável do webhook** (ack rápido + worker) — caminho de escala.
 - **Cérebro 3 (tribunais)** — agregador (próximo dos cérebros).
@@ -261,13 +281,13 @@
 
 ## Próximos passos previstos
 
-1. **Agendar os Railway Crons** (sync do corpus semanal + lembretes a cada 15 min),
-   **aprovar o template `lembrete_generico` na Meta** e **validar pelo WhatsApp**
-   (memória, C1, RAG, lembrete) quando houver chip; pagamento sandbox (6B).
-2. **Jurisprudência — agregador pago** no `SourcePort` (mesma sync), ou **Cérebro 3
-   (tribunais)**.
-3. Incrementos do Cérebro 1 (financeiro: honorários/custos); dunning de cobrança;
-   mídia→Storage.
+1. **12B — busca de documentos** (achar por referência vaga; usa `busca_texto`/`chaves`
+   já guardados pelo 12A).
+2. **Agendar os Railway Crons** (sync semanal + lembretes 15 min), **aprovar o template
+   na Meta**, **criar o bucket `documentos`** e **validar pelo WhatsApp** (memória, C1,
+   RAG, lembrete, documentos) quando houver chip; pagamento sandbox (6B).
+3. **Jurisprudência — agregador pago** ou **Cérebro 3 (tribunais)**; financeiro
+   (honorários/custos); OCR de documentos.
 
 ## Como rodar
 

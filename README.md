@@ -380,6 +380,49 @@ npm run send:lembretes -- --dry-run --now "2026-07-01T16:05:00Z"
 Saída: para cada lembrete devido, **para quem** iria, **qual compromisso**, **o
 horário de disparo** e o **texto final** (em horário de Brasília).
 
+## Gestão de documentos (Passo 12A)
+
+Primeira vez que o assessor lida com **arquivos**. Ao receber um documento, decide
+(com o usuário) se **resume, salva ou ambos**; e **sempre que salva** extrai e guarda
+**informações-chave** (tipo, partes, números, datas, assunto, resumo) — é o que vai
+permitir **encontrá-lo depois** (a busca é o 12B).
+
+- **Decisão:** legenda com ação ("resuma", "salva", "resume e guarda") → executa
+  direto; sem ação → pergunta **1 Resumir / 2 Salvar / 3 Resumir e salvar** (estado
+  por tenant = a linha em `aguardando_decisao`); resposta inválida → re-pergunta. Só
+  resumir = mostra e **não guarda** (apaga o staging).
+- **Formatos:** `.txt`, **PDF com texto**, `.docx`. **PDF-imagem/foto** → avisa que não
+  dá para ler (OCR futuro) e, se guardar, marca `sem_texto` e avisa que o documento
+  **não poderá ser achado por conteúdo** (só por nome/data). Planilhas: fora por ora.
+- **Informações-chave:** extraídas por LLM, **sem inventar** (campo ausente fica
+  vazio); guardadas em `chaves` (jsonb) + `busca_texto` (para o 12B).
+- **Resumo:** documento longo é resumido em partes e consolidado (map-reduce).
+- **Armazenamento (sigilo):** arquivo em **bucket privado** no caminho
+  `${assinanteId}/${docId}/…` (prefixo da identidade); metadados na tabela
+  `documentos` (**RLS force**, via `withTenant`). A chave privilegiada do Storage só
+  toca o **arquivo**; **de quem é o documento** é decidido na tabela (RLS) — a URL
+  assinada (curta) só é gerada para refs do próprio dono.
+- **Vínculo a processo:** "guarda no processo <CNJ>" resolve por tenant; inexistente
+  → guarda solto, com aviso.
+
+### Testar pela CLI (sem chip)
+
+Pré-requisitos: bucket privado `documentos` criado no Supabase; `.env` com
+`SUPABASE_*`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `LLM_*`; um assinante de
+teste (`npm run seed:assinante -- <telefone>`).
+
+```bash
+# resume e guarda (default) um arquivo local, como o dono <telefone>
+npm run doc:process -- ./contrato.pdf --telefone 5511999990001
+# só resumir (não guarda)
+npm run doc:process -- ./peticao.docx --telefone 5511999990001 --acao resumir
+# salvar vinculando a um processo já cadastrado
+npm run doc:process -- ./intimacao.pdf --telefone 5511999990001 --acao salvar --processo 0001234-55.2024.8.26.0100
+```
+
+> O **download da mídia do WhatsApp** (receber o arquivo pelo Zap) depende do chip —
+> o código está pronto (`MediaDownloader`), validação manual pendente.
+
 ## Webhook do WhatsApp (Cloud API)
 
 Entrada real do produto. Só é registrado se as `WHATSAPP_*` estiverem
@@ -644,7 +687,7 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0022)
+## Tabelas (migrações 0001–0023)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`
@@ -668,7 +711,9 @@ cria `lembretes_enviados` (idempotência do lembrete proativo, RLS force) + as f
 SECURITY DEFINER `app.lembretes_due` (seleção dos devidos) e
 `app.marcar_lembrete_enviado` (marcação atômica). A `0022` concede `delete` em
 `lembretes_enviados` a `authenticated` (limpar a marcação ao remarcar; a policy por
-tenant mantém o isolamento) — base do editar/remover do Cérebro 1.
+tenant mantém o isolamento) — base do editar/remover do Cérebro 1. A `0023` evolui
+`documentos` (Passo 12A): `processo_id` opcional (doc solto) + `chaves` (jsonb),
+`resumo`, `extracao_status`, `busca_texto`, `status`, `legenda` — RLS force já existente.
 
 ## PENDENTE (fora do escopo atual)
 

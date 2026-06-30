@@ -17,10 +17,6 @@ interface Logger {
   error(obj: Record<string, unknown>, msg?: string): void;
 }
 
-const MEDIA_REPLY =
-  '📎 Recebi seu arquivo, mas o processamento de documentos ainda está em ' +
-  'desenvolvimento. Em breve poderei vinculá-lo ao seu processo. 🚧';
-
 export interface WhatsappWebhookProcessorDeps {
   whatsapp: WhatsappPort;
   orchestrator: Orchestrator;
@@ -68,13 +64,10 @@ export class WhatsappWebhookProcessor {
       // Usuário escreveu agora → abre/atualiza a janela de 24h.
       await this.deps.window.recordInbound(msg.from, this.deps.clock());
 
-      if (msg.media) {
-        // Mídia: placeholder honesto, sem passar pelo orquestrador (download/Storage PENDENTE).
-        await this.deps.whatsapp.sendFreeFormMessage(msg.from, MEDIA_REPLY);
-      } else {
-        const result = await this.deps.orchestrator.handleInboundMessage(msg);
-        await this.deps.whatsapp.sendFreeFormMessage(msg.from, result.replyText);
-      }
+      // Texto E mídia passam pelo orquestrador (que aplica o porteiro e roteia
+      // documento/decisão; mídia sem handler configurado → placeholder honesto).
+      const result = await this.deps.orchestrator.handleInboundMessage(msg);
+      await this.deps.whatsapp.sendFreeFormMessage(msg.from, result.replyText);
 
       // Sucesso → confirma o claim (não será reprocessada).
       await this.deps.dedup.markDone(msg.messageId);
