@@ -14,7 +14,7 @@ simples** (o que o assessor faz, como falar com ele e a visão de produto), veja
 
 ## Stack
 
-- **Node 20 LTS + TypeScript** (ESM/NodeNext, `strict`)
+- **Node 20.19+ ou 22+ + TypeScript** (ESM/NodeNext, `strict`) — ver "Versão do Node"
 - **Fastify** — HTTP (webhooks e rotas)
 - **Supabase** (Postgres gerenciado) — migrações via **Supabase CLI**
 - **postgres** (porsager) — driver do caminho de tenant, via **pooler Supavisor (transaction)**
@@ -670,22 +670,26 @@ trocar. Para algo estável, use o caminho REAL acima.
 
 ## Como rodar (local, sem deploy)
 
-Pré-requisitos: Node 20, e (para o banco) um projeto Supabase ou o Supabase CLI.
+### Versão do Node (importante)
+
+Use **Node 20.19+ ou Node 22+**. Verifique a sua com:
 
 ```bash
-npm install
-cp .env.example .env      # preencha os valores (NUNCA commite o .env)
-
-# Banco (escolha um):
-supabase start            # Postgres local (requer Docker), ou
-supabase link --project-ref <ref> && supabase db push   # aplica migrações no remoto
-
-npm run dev               # sobe a API em http://localhost:3000
-curl localhost:3000/health        # {"status":"ok"}
-curl localhost:3000/health/ready  # confere o banco (503 se indisponível)
+node -v
 ```
 
-Pré-requisitos: Node 20, e (para o banco) um projeto Supabase ou o Supabase CLI.
+> **Por quê:** o `@supabase/supabase-js` constrói um cliente Realtime que, sem um
+> WebSocket, tenta resolver um nativo — que **só existe a partir do Node 22**. O
+> cliente administrativo deste projeto (`src/infra/db/admin.ts`) **desliga o
+> Realtime** (não usamos canais em tempo real), então os scripts de banco rodam
+> bem **a partir do Node 20.18**. Ainda assim, o `engines` do projeto pede
+> `^20.19 || ^22` (recomendado); em Node 20.18 o `npm install` mostra um aviso
+> `EBADENGINE` inofensivo. Se quiser zerar o aviso, atualize o Node (ex.: `nvm
+> install 20.19` ou `nvm install 22`). Node 22+ é a recomendação para produção.
+
+### Passos
+
+Pré-requisitos: Node 20.19+/22+, e (para o banco) um projeto Supabase ou o Supabase CLI.
 
 ```bash
 npm install
@@ -701,7 +705,9 @@ curl localhost:3000/health/ready  # confere o banco (503 se indisponível)
 ```
 
 Scripts: `dev`, `build`, `start`, `typecheck`, `lint`, `format`, `test`,
-`db:start`, `db:reset`, `db:migration`, `db:push`.
+`seed:assinante`, `reset:assinante`, `trial:expire`, `ingest:corpus`,
+`sync:corpus`, `ask:rag`, `send:lembretes`, `doc:process`, `doc:reindex`,
+`doc:search`, `db:start`, `db:reset`, `db:migration`, `db:push`.
 
 ## Segurança e isolamento multi-tenant (essencial)
 
