@@ -11,6 +11,16 @@ import type { NormaConteudo, NormaRef, SourcePort } from '../../../core/ports/so
 import { fetchHttpGet, type HttpGet } from '../http.js';
 import { CORPUS_MANIFEST } from './manifest.js';
 
+// O WAF do Planalto RESETA a conexão (ECONNRESET) para requisições sem User-Agent
+// de navegador. Mandamos cabeçalhos de navegador para baixar de forma confiável.
+const PLANALTO_HEADERS: Record<string, string> = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+    '(KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'pt-BR,pt;q=0.9',
+};
+
 function decodeHtml(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   // Detecta charset no início; Planalto é latin1, mas respeitamos utf-8 quando declarado.
@@ -54,7 +64,7 @@ export class PlanaltoLegislacaoSource implements SourcePort {
   }
 
   async fetchNorma(ref: NormaRef): Promise<NormaConteudo> {
-    const res = await this.httpGet(ref.fonteUrl);
+    const res = await this.httpGet(ref.fonteUrl, { headers: PLANALTO_HEADERS });
     if (res.status !== 200) {
       throw new Error(`HTTP ${res.status} ao baixar ${ref.fonteUrl}`);
     }

@@ -49,6 +49,20 @@ describe('PlanaltoLegislacaoSource', () => {
     expect(out.vigenciaStatus).toBe('revogada');
   });
 
+  it('fetchNorma: envia User-Agent de navegador (WAF do Planalto reseta sem ele)', async () => {
+    let capturado: { headers?: Record<string, string> } | undefined;
+    const capturingGet: HttpGet = (_url, init) => {
+      capturado = init;
+      return Promise.resolve({
+        status: 200,
+        arrayBuffer: () => Promise.resolve(toArrayBuffer('<p>Art. 1 ...</p>')),
+      });
+    };
+    const src = new PlanaltoLegislacaoSource(capturingGet);
+    await src.fetchNorma(ref);
+    expect(capturado?.headers?.['User-Agent']).toMatch(/Mozilla/);
+  });
+
   it('fetchNorma: HTTP != 200 lança', async () => {
     const src = new PlanaltoLegislacaoSource(fakeGet(toArrayBuffer('x'), 503));
     await expect(src.fetchNorma(ref)).rejects.toThrow(/503/);

@@ -99,9 +99,18 @@ describe('createLlmAdapter / config', () => {
     expect(createLlmAdapter(openaiCfg)).toBeInstanceOf(OpenAiLlmAdapter);
   });
 
-  it('sem LLM configurado: getLlmConfig null e requireLlmConfig lança', () => {
-    // Ambiente de teste não define LLM_* (ver vitest.config).
-    expect(getLlmConfig()).toBeNull();
-    expect(() => requireLlmConfig()).toThrow(/LLM não configurado/);
+  it('getLlmConfig/requireLlmConfig refletem o ambiente (sem expor segredo)', () => {
+    // Independe do .env: se LLM_* estiver setado, devolve a config e require não lança;
+    // senão, getLlmConfig é null e require lança. (Não assume um .env específico.)
+    const temEnv = Boolean(
+      process.env.LLM_PROVIDER && process.env.LLM_MODEL && process.env.LLM_API_KEY,
+    );
+    if (temEnv) {
+      expect(getLlmConfig()?.provider).toBeTruthy();
+      expect(() => requireLlmConfig()).not.toThrow();
+    } else {
+      expect(getLlmConfig()).toBeNull();
+      expect(() => requireLlmConfig()).toThrow(/LLM não configurado/);
+    }
   });
 });

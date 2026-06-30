@@ -52,6 +52,21 @@ function normalizeForHash(texto: string): string {
   return texto.replace(/\s+/g, ' ').trim();
 }
 
+/** Mensagem de erro legível, expondo a CAUSA (ex.: ECONNRESET de um fetch falho),
+ *  que de outro modo fica escondida atrás de um genérico "fetch failed". */
+function describeError(err: unknown): string {
+  if (err instanceof Error) {
+    const cause = (err as { cause?: unknown }).cause;
+    if (cause instanceof Error) {
+      const code = (cause as { code?: unknown }).code;
+      const codeStr = typeof code === 'string' ? `${code}: ` : '';
+      return `${err.message} — ${codeStr}${cause.message}`;
+    }
+    return err.message;
+  }
+  return String(err);
+}
+
 function sha256(texto: string): string {
   return createHash('sha256').update(texto, 'utf8').digest('hex');
 }
@@ -179,7 +194,7 @@ export async function syncCorpus(
     } catch (err) {
       // Resiliência por norma: corpus daquela norma fica intacto; segue as demais.
       result.status = result.status === 'erro' ? 'erro' : 'parcial';
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = describeError(err);
       result.erros.push({ identificador: ref.identificador, erro: msg });
       logger.error({ identificador: ref.identificador, err: msg }, 'sync: falha na norma');
     }
