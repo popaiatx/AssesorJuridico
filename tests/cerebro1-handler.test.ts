@@ -86,6 +86,31 @@ class InMemoryStore implements Cerebro1Store {
   consultarProcesso(assinanteId: string): Promise<ProcessoRow[]> {
     return Promise.resolve(this.processosPorTenant.get(assinanteId) ?? []);
   }
+  // Métodos de edição (Passo 11) — não usados por estes testes (stubs).
+  findCompromissos(): Promise<never[]> {
+    return Promise.resolve([]);
+  }
+  getCompromissoById(): Promise<null> {
+    return Promise.resolve(null);
+  }
+  updateCompromisso(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+  deleteCompromisso(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+  findProcessos(): Promise<never[]> {
+    return Promise.resolve([]);
+  }
+  getProcessoById(): Promise<null> {
+    return Promise.resolve(null);
+  }
+  updateProcesso(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+  arquivarProcesso(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
 }
 
 const clock = () => new Date('2026-06-29T12:00:00.000Z');
