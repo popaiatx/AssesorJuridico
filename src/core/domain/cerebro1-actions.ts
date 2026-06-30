@@ -8,7 +8,7 @@
  *  - faltando: campos obrigatórios ainda ausentes (pergunta só o que falta);
  *  - erro: mensagem quando algo veio inválido (pede correção).
  */
-export type ActionKind = 'leitura' | 'escrita' | 'ajuda';
+export type ActionKind = 'leitura' | 'escrita' | 'edicao' | 'ajuda';
 
 export interface ValidationResult {
   value: Record<string, unknown>;
@@ -243,6 +243,199 @@ const consultarProcesso: ActionDef = {
   },
 };
 
+// --- Passo 11: editar/remover (ações de EDIÇÃO; o alvo é resolvido pelo handler,
+// que monta a confirmação com o registro REAL e desambigua quando há vários) ---
+
+const SEL_COMPROMISSO = {
+  alvo_processo: { type: 'string', description: 'CNJ do processo do compromisso a alterar/remover (opcional)' },
+  alvo_tipo: { type: 'string', enum: TIPOS, description: 'tipo do compromisso alvo (opcional)' },
+  alvo_dia: { type: 'string', description: 'dia do compromisso alvo em ISO date YYYY-MM-DD (opcional)' },
+};
+
+function parseSelectorCompromisso(input: Record<string, unknown>): {
+  sel: Record<string, unknown>;
+  erro: string | null;
+} {
+  const sel: Record<string, unknown> = {};
+  let erro: string | null = null;
+  const ap = str(input.alvo_processo);
+  if (ap) {
+    const cnj = normalizeCnj(ap);
+    if (!cnj) erro = 'O número do processo (CNJ) precisa ter 20 dígitos. Pode conferir?';
+    else sel.alvoProcesso = cnj;
+  }
+  const at = str(input.alvo_tipo).toLowerCase();
+  if (TIPOS.includes(at)) sel.alvoTipo = at;
+  const ad = str(input.alvo_dia);
+  if (ad) {
+    const d = new Date(ad);
+    if (Number.isNaN(d.getTime())) erro = erro ?? 'Não entendi o dia do compromisso. Pode informar a data?';
+    else sel.alvoDia = ad.slice(0, 10);
+  }
+  return { sel, erro };
+}
+
+const SEM_SELETOR_COMPROMISSO =
+  'Qual compromisso? Me diga o processo, o tipo (audiência/reunião/prazo) ou o dia.';
+
+const editarCompromisso: ActionDef = {
+  name: 'editar_compromisso',
+  kind: 'edicao',
+  description:
+    'Alterar um compromisso existente (mudar data/hora, tipo, descrição ou o processo vinculado). ' +
+    'Identifique o alvo por processo, tipo e/ou dia.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ...SEL_COMPROMISSO,
+      nova_data_hora: { type: 'string', description: 'Novo horário em ISO 8601 com fuso (opcional)' },
+      novo_tipo: { type: 'string', enum: TIPOS, description: 'Novo tipo (opcional)' },
+      nova_descricao: { type: 'string', description: 'Nova descrição (opcional)' },
+      novo_processo: { type: 'string', description: 'CNJ do novo processo a vincular (opcional)' },
+    },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro: erroSel } = parseSelectorCompromisso(input);
+    const value: Record<string, unknown> = { ...sel };
+    let erro = erroSel;
+
+    const ndh = str(input.nova_data_hora);
+    if (ndh) {
+      const d = new Date(ndh);
+      if (Number.isNaN(d.getTime())) erro = erro ?? 'Não entendi a nova data e hora. Ex.: 02/07 às 14h?';
+      else value.novaDataHora = d.toISOString();
+    }
+    const nt = str(input.novo_tipo).toLowerCase();
+    if (TIPOS.includes(nt)) value.novoTipo = nt;
+    const nd = str(input.nova_descricao);
+    if (nd) value.novaDescricao = nd;
+    const np = str(input.novo_processo);
+    if (np) {
+      const cnj = normalizeCnj(np);
+      if (!cnj) erro = erro ?? 'O número do novo processo (CNJ) precisa ter 20 dígitos.';
+      else value.novoProcesso = cnj;
+    }
+
+    const temSelector = value.alvoProcesso || value.alvoTipo || value.alvoDia;
+    const temMudanca = value.novaDataHora || value.novoTipo || value.novaDescricao || value.novoProcesso;
+    if (!erro && !temSelector) erro = SEM_SELETOR_COMPROMISSO;
+    else if (!erro && !temMudanca)
+      erro = 'O que você quer mudar? (nova data/hora, novo tipo, descrição ou processo)';
+    return { value, faltando: [], erro };
+  },
+};
+
+const cancelarCompromisso: ActionDef = {
+  name: 'cancelar_compromisso',
+  kind: 'edicao',
+  description:
+    'Remover/cancelar um compromisso existente. Identifique o alvo por processo, tipo e/ou dia. ' +
+    'AÇÃO DESTRUTIVA: o handler confirma mostrando o registro real antes de remover.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { ...SEL_COMPROMISSO },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro } = parseSelectorCompromisso(input);
+    const temSelector = sel.alvoProcesso || sel.alvoTipo || sel.alvoDia;
+    return {
+      value: sel,
+      faltando: [],
+      erro: erro ?? (temSelector ? null : SEM_SELETOR_COMPROMISSO),
+    };
+  },
+};
+
+const SEL_PROCESSO = {
+  alvo_cnj: { type: 'string', description: 'CNJ do processo alvo (opcional)' },
+  alvo_cliente: { type: 'string', description: 'Nome do cliente do processo alvo (opcional)' },
+  alvo_parte: { type: 'string', description: 'Parte contrária do processo alvo (opcional)' },
+};
+
+function parseSelectorProcesso(input: Record<string, unknown>): {
+  sel: Record<string, unknown>;
+  erro: string | null;
+} {
+  const sel: Record<string, unknown> = {};
+  let erro: string | null = null;
+  const ac = str(input.alvo_cnj);
+  if (ac) {
+    const cnj = normalizeCnj(ac);
+    if (!cnj) erro = 'O número do processo (CNJ) precisa ter 20 dígitos. Pode conferir?';
+    else sel.alvoCnj = cnj;
+  }
+  const acl = str(input.alvo_cliente);
+  if (acl) sel.alvoCliente = acl;
+  const ap = str(input.alvo_parte);
+  if (ap) sel.alvoParte = ap;
+  return { sel, erro };
+}
+
+const SEM_SELETOR_PROCESSO = 'Qual processo? Me diga o número (CNJ), o cliente ou a parte.';
+
+const editarProcesso: ActionDef = {
+  name: 'editar_processo',
+  kind: 'edicao',
+  description:
+    'Alterar campos de um processo existente (status, cliente, parte contrária ou área). ' +
+    'Identifique o alvo por CNJ, cliente ou parte.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ...SEL_PROCESSO,
+      novo_status: { type: 'string', description: 'Novo status (opcional)' },
+      novo_cliente: { type: 'string', description: 'Novo cliente (opcional)' },
+      nova_parte: { type: 'string', description: 'Nova parte contrária (opcional)' },
+      nova_area: { type: 'string', description: 'Nova área (opcional)' },
+    },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro: erroSel } = parseSelectorProcesso(input);
+    const value: Record<string, unknown> = { ...sel };
+    let erro = erroSel;
+    const ns = str(input.novo_status);
+    if (ns) value.novoStatus = ns;
+    const nc = str(input.novo_cliente);
+    if (nc) value.novoCliente = nc;
+    const npar = str(input.nova_parte);
+    if (npar) value.novaParte = npar;
+    const na = str(input.nova_area);
+    if (na) value.novaArea = na;
+
+    const temSelector = value.alvoCnj || value.alvoCliente || value.alvoParte;
+    const temMudanca = value.novoStatus || value.novoCliente || value.novaParte || value.novaArea;
+    if (!erro && !temSelector) erro = SEM_SELETOR_PROCESSO;
+    else if (!erro && !temMudanca)
+      erro = 'O que você quer mudar no processo? (status, cliente, parte ou área)';
+    return { value, faltando: [], erro };
+  },
+};
+
+const arquivarProcessoAcao: ActionDef = {
+  name: 'arquivar_processo',
+  kind: 'edicao',
+  description:
+    'Arquivar um processo (deixa de aparecer na rotina, mas mantém o histórico). ' +
+    'Identifique o alvo por CNJ, cliente ou parte.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { ...SEL_PROCESSO },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro } = parseSelectorProcesso(input);
+    const temSelector = sel.alvoCnj || sel.alvoCliente || sel.alvoParte;
+    return { value: sel, faltando: [], erro: erro ?? (temSelector ? null : SEM_SELETOR_PROCESSO) };
+  },
+};
+
 const ajudaAssessor: ActionDef = {
   name: 'ajuda_assessor',
   kind: 'ajuda',
@@ -256,9 +449,13 @@ const ajudaAssessor: ActionDef = {
 export const ACTIONS: ActionDef[] = [
   criarCompromisso,
   listarCompromissos,
+  editarCompromisso,
+  cancelarCompromisso,
   cadastrarProcesso,
   listarProcessos,
   consultarProcesso,
+  editarProcesso,
+  arquivarProcessoAcao,
   ajudaAssessor,
 ];
 

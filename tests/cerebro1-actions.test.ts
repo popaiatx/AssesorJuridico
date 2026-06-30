@@ -51,6 +51,56 @@ describe('validação de ações', () => {
   });
 });
 
+describe('validação das ações de edição/remoção (Passo 11)', () => {
+  const editarC = ACTIONS_BY_NAME.editar_compromisso!;
+  const cancelarC = ACTIONS_BY_NAME.cancelar_compromisso!;
+  const editarP = ACTIONS_BY_NAME.editar_processo!;
+  const arquivarP = ACTIONS_BY_NAME.arquivar_processo!;
+
+  it('editar_compromisso: seletor + mudança → ok (normaliza data e dia)', () => {
+    const r = editarC.validate({ alvo_tipo: 'audiencia', alvo_dia: '2026-07-15', nova_data_hora: '2026-07-18T16:00:00-03:00' });
+    expect(r.erro).toBeNull();
+    expect(r.value.alvoTipo).toBe('audiencia');
+    expect(r.value.alvoDia).toBe('2026-07-15');
+    expect(typeof r.value.novaDataHora).toBe('string');
+  });
+
+  it('editar_compromisso sem seletor → erro (qual compromisso)', () => {
+    const r = editarC.validate({ nova_descricao: 'nova' });
+    expect(r.erro).toMatch(/qual compromisso/i);
+  });
+
+  it('editar_compromisso com seletor mas sem mudança → erro (o que mudar)', () => {
+    const r = editarC.validate({ alvo_tipo: 'reuniao' });
+    expect(r.erro).toMatch(/mudar/i);
+  });
+
+  it('editar_compromisso nova data inválida → erro', () => {
+    const r = editarC.validate({ alvo_tipo: 'reuniao', nova_data_hora: 'sei lá' });
+    expect(r.erro).toMatch(/data/i);
+  });
+
+  it('cancelar_compromisso: precisa de seletor; com seletor → ok', () => {
+    expect(cancelarC.validate({}).erro).toMatch(/qual compromisso/i);
+    const r = cancelarC.validate({ alvo_processo: '0001234-56.2024.8.26.0100', alvo_tipo: 'audiencia' });
+    expect(r.erro).toBeNull();
+    expect(r.value.alvoProcesso).toBe('00012345620248260100');
+    expect(r.value.alvoTipo).toBe('audiencia');
+  });
+
+  it('editar_processo: seletor + mudança → ok; sem mudança → erro', () => {
+    const ok = editarP.validate({ alvo_cnj: '0001234-56.2024.8.26.0100', novo_status: 'arquivado' });
+    expect(ok.erro).toBeNull();
+    expect(ok.value.novoStatus).toBe('arquivado');
+    expect(editarP.validate({ alvo_cliente: 'Maria' }).erro).toMatch(/mudar/i);
+  });
+
+  it('arquivar_processo: precisa de seletor', () => {
+    expect(arquivarP.validate({}).erro).toMatch(/qual processo/i);
+    expect(arquivarP.validate({ alvo_cnj: '0001234-56.2024.8.26.0100' }).erro).toBeNull();
+  });
+});
+
 describe('afirmativo/negativo', () => {
   it('reconhece confirmação e cancelamento', () => {
     expect(isAffirmative('sim')).toBe(true);
