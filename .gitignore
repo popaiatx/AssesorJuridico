@@ -23,3 +23,6 @@ Thumbs.db
 # Editores
 .vscode/
 .idea/
+
+# Config local de ferramentas (MCP) — não versionar
+.mcp.json
