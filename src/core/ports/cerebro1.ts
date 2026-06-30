@@ -8,7 +8,7 @@
 export interface PendingAction {
   acao: string;
   params: Record<string, unknown>;
-  fase: 'coletando' | 'confirmando';
+  fase: 'coletando' | 'confirmando' | 'desambiguando';
   faltando: string[];
 }
 
@@ -27,6 +27,50 @@ export interface CompromissoRow {
   descricao: string | null;
   local: string | null;
   processoId: string | null;
+}
+
+/** Compromisso com rótulos do processo/cliente — para resolver alvo e confirmar. */
+export interface CompromissoAlvo {
+  id: string;
+  tipo: string;
+  dataHora: string; // ISO
+  descricao: string | null;
+  processoId: string | null;
+  processoNumero: string | null;
+  clienteNome: string | null;
+}
+
+/** Seletor do compromisso alvo (linguagem natural → filtros), escopado por tenant. */
+export interface CompromissoSelector {
+  numeroCnj?: string | null;
+  tipo?: 'audiencia' | 'reuniao' | 'prazo' | null;
+  /** Dia referido (ISO date YYYY-MM-DD) — casa compromissos daquele dia (BRT). */
+  dia?: string | null;
+}
+
+/** Campos alteráveis de um compromisso (date muda → recalcula lembretes). */
+export interface CompromissoPatch {
+  tipo?: 'audiencia' | 'reuniao' | 'prazo';
+  dataHora?: string; // ISO
+  descricao?: string | null;
+  processoId?: string | null;
+  /** Quando presente (data mudou): novos lembretes + limpa lembretes_enviados. */
+  lembreteEm?: string[];
+}
+
+/** Seletor de processo alvo. */
+export interface ProcessoSelector {
+  numeroCnj?: string | null;
+  clienteNome?: string | null;
+  parte?: string | null;
+}
+
+/** Campos alteráveis de um processo. `clienteId` já resolvido pelo handler. */
+export interface ProcessoPatch {
+  status?: string | null;
+  clienteId?: string | null;
+  parteContraria?: string | null;
+  area?: string | null;
 }
 
 export interface NovoProcesso {
@@ -63,6 +107,25 @@ export interface Cerebro1Store {
     assinanteId: string,
     filtro: { numeroCnj: string | null; parte: string | null },
   ): Promise<ProcessoRow[]>;
+
+  // --- Passo 11: editar/remover (sempre escopado por tenant) ---
+  /** Resolve candidatos do compromisso alvo (com rótulos de processo/cliente). */
+  findCompromissos(assinanteId: string, sel: CompromissoSelector): Promise<CompromissoAlvo[]>;
+  /** Busca um compromisso por id, RE-VERIFICANDO o tenant. */
+  getCompromissoById(assinanteId: string, id: string): Promise<CompromissoAlvo | null>;
+  /** Atualiza um compromisso do tenant. Se `lembreteEm` vier, grava e LIMPA
+   *  lembretes_enviados do compromisso (atomicamente). Retorna se alterou 1 linha. */
+  updateCompromisso(assinanteId: string, id: string, patch: CompromissoPatch): Promise<boolean>;
+  /** Remove um compromisso do tenant (cascade limpa lembretes_enviados). */
+  deleteCompromisso(assinanteId: string, id: string): Promise<boolean>;
+  /** Resolve candidatos do processo alvo. */
+  findProcessos(assinanteId: string, sel: ProcessoSelector): Promise<ProcessoRow[]>;
+  /** Busca um processo por id, RE-VERIFICANDO o tenant. */
+  getProcessoById(assinanteId: string, id: string): Promise<ProcessoRow | null>;
+  /** Atualiza campos de um processo do tenant. Retorna se alterou 1 linha. */
+  updateProcesso(assinanteId: string, id: string, patch: ProcessoPatch): Promise<boolean>;
+  /** Arquiva (status='arquivado') um processo do tenant. Retorna se alterou. */
+  arquivarProcesso(assinanteId: string, id: string): Promise<boolean>;
 }
 
 export interface PendingActionStore {

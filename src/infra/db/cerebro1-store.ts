@@ -5,11 +5,16 @@
  */
 import { withTenant } from './tenant.js';
 import type {
+  CompromissoAlvo,
+  CompromissoPatch,
   CompromissoRow,
+  CompromissoSelector,
   NovoCompromisso,
   NovoProcesso,
   PendingAction,
+  ProcessoPatch,
   ProcessoRow,
+  ProcessoSelector,
 } from '../../core/ports/cerebro1.js';
 
 function iso(v: Date | string): string {
@@ -176,6 +181,183 @@ export async function consultarProcesso(
   });
 }
 
+// --- Passo 11: editar/remover (sempre escopado por tenant via withTenant/RLS) ---
+
+interface DbAlvo {
+  id: string;
+  tipo: string;
+  data_hora: Date | string;
+  descricao: string | null;
+  processo_id: string | null;
+  processo_numero: string | null;
+  cliente_nome: string | null;
+}
+function toAlvo(r: DbAlvo): CompromissoAlvo {
+  return {
+    id: r.id,
+    tipo: r.tipo,
+    dataHora: iso(r.data_hora),
+    descricao: r.descricao,
+    processoId: r.processo_id,
+    processoNumero: r.processo_numero,
+    clienteNome: r.cliente_nome,
+  };
+}
+
+export async function findCompromissos(
+  assinanteId: string,
+  sel: CompromissoSelector,
+): Promise<CompromissoAlvo[]> {
+  const cnj = sel.numeroCnj ?? null;
+  const tipo = sel.tipo ?? null;
+  const dia = sel.dia ?? null;
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<DbAlvo[]>`
+      select c.id, c.tipo, c.data_hora, c.descricao, c.processo_id,
+             p.numero_cnj as processo_numero, cl.nome as cliente_nome
+      from compromissos c
+      left join processos p on p.id = c.processo_id
+      left join clientes cl on cl.id = p.cliente_id
+      where c.assinante_id = ${assinanteId}
+        and (${cnj}::text is null or p.numero_cnj = ${cnj})
+        and (${tipo}::text is null or c.tipo::text = ${tipo})
+        and (${dia}::date is null
+             or (c.data_hora at time zone 'America/Sao_Paulo')::date = ${dia}::date)
+      order by c.data_hora asc
+      limit 10
+    `;
+    return rows.map(toAlvo);
+  });
+}
+
+export async function getCompromissoById(
+  assinanteId: string,
+  id: string,
+): Promise<CompromissoAlvo | null> {
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<DbAlvo[]>`
+      select c.id, c.tipo, c.data_hora, c.descricao, c.processo_id,
+             p.numero_cnj as processo_numero, cl.nome as cliente_nome
+      from compromissos c
+      left join processos p on p.id = c.processo_id
+      left join clientes cl on cl.id = p.cliente_id
+      where c.assinante_id = ${assinanteId} and c.id = ${id}
+    `;
+    return rows[0] ? toAlvo(rows[0]) : null;
+  });
+}
+
+export async function updateCompromisso(
+  assinanteId: string,
+  id: string,
+  patch: CompromissoPatch,
+): Promise<boolean> {
+  const tipo = patch.tipo ?? null;
+  const dataHora = patch.dataHora ?? null;
+  const descricao = patch.descricao ?? null;
+  const processoId = patch.processoId ?? null;
+  const lembrete = patch.lembreteEm ?? null; // presente só quando a data mudou
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<{ id: string }[]>`
+      update compromissos set
+        tipo = coalesce(${tipo}::compromisso_tipo, tipo),
+        data_hora = coalesce(${dataHora}::timestamptz, data_hora),
+        descricao = coalesce(${descricao}, descricao),
+        processo_id = coalesce(${processoId}::uuid, processo_id),
+        lembrete_em = coalesce(${lembrete}::timestamptz[], lembrete_em)
+      where id = ${id} and assinante_id = ${assinanteId}
+      returning id
+    `;
+    if (rows.length === 0) return false;
+    // Data mudou → a marcação antiga não vale mais para a nova data.
+    if (lembrete !== null) {
+      await tx`delete from lembretes_enviados where compromisso_id = ${id}`;
+    }
+    return true;
+  });
+}
+
+export async function deleteCompromisso(assinanteId: string, id: string): Promise<boolean> {
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<{ id: string }[]>`
+      delete from compromissos where id = ${id} and assinante_id = ${assinanteId} returning id
+    `;
+    return rows.length > 0; // cascade limpa lembretes_enviados
+  });
+}
+
+export async function findProcessos(
+  assinanteId: string,
+  sel: ProcessoSelector,
+): Promise<ProcessoRow[]> {
+  const cnj = sel.numeroCnj ?? null;
+  const clientePattern = sel.clienteNome ? `%${sel.clienteNome}%` : null;
+  const partePattern = sel.parte ? `%${sel.parte}%` : null;
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<DbProcesso[]>`
+      select p.id, p.numero_cnj, p.parte_contraria, p.area, p.status, c.nome as cliente_nome
+      from processos p
+      left join clientes c on c.id = p.cliente_id
+      where p.assinante_id = ${assinanteId}
+        and (${cnj}::text is null or p.numero_cnj = ${cnj})
+        and (${clientePattern}::text is null or c.nome ilike ${clientePattern})
+        and (${partePattern}::text is null or p.parte_contraria ilike ${partePattern})
+      order by p.criado_em desc
+      limit 10
+    `;
+    return rows.map(toProcesso);
+  });
+}
+
+export async function getProcessoById(
+  assinanteId: string,
+  id: string,
+): Promise<ProcessoRow | null> {
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<DbProcesso[]>`
+      select p.id, p.numero_cnj, p.parte_contraria, p.area, p.status, c.nome as cliente_nome
+      from processos p
+      left join clientes c on c.id = p.cliente_id
+      where p.assinante_id = ${assinanteId} and p.id = ${id}
+    `;
+    return rows[0] ? toProcesso(rows[0]) : null;
+  });
+}
+
+export async function updateProcesso(
+  assinanteId: string,
+  id: string,
+  patch: ProcessoPatch,
+): Promise<boolean> {
+  const status = patch.status ?? null;
+  const clienteId = patch.clienteId ?? null;
+  const parte = patch.parteContraria ?? null;
+  const area = patch.area ?? null;
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<{ id: string }[]>`
+      update processos set
+        status = coalesce(${status}, status),
+        cliente_id = coalesce(${clienteId}::uuid, cliente_id),
+        parte_contraria = coalesce(${parte}, parte_contraria),
+        area = coalesce(${area}, area)
+      where id = ${id} and assinante_id = ${assinanteId}
+      returning id
+    `;
+    return rows.length > 0;
+  });
+}
+
+export async function arquivarProcesso(assinanteId: string, id: string): Promise<boolean> {
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<{ id: string }[]>`
+      update processos set status = 'arquivado'
+      where id = ${id} and assinante_id = ${assinanteId}
+      returning id
+    `;
+    return rows.length > 0;
+  });
+}
+
 // --- Ação pendente (confirmar-antes-de-gravar / slot-filling), por tenant ---
 
 export async function getPendingAction(assinanteId: string): Promise<PendingAction | null> {
@@ -188,12 +370,9 @@ export async function getPendingAction(assinanteId: string): Promise<PendingActi
     `;
     const r = rows[0];
     if (!r) return null;
-    return {
-      acao: r.acao,
-      params: r.params,
-      fase: r.fase === 'confirmando' ? 'confirmando' : 'coletando',
-      faltando: r.faltando,
-    };
+    const fase =
+      r.fase === 'confirmando' ? 'confirmando' : r.fase === 'desambiguando' ? 'desambiguando' : 'coletando';
+    return { acao: r.acao, params: r.params, fase, faltando: r.faltando };
   });
 }
 

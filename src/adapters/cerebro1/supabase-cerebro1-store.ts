@@ -4,15 +4,23 @@
  */
 import type { Cerebro1Store, PendingActionStore } from '../../core/ports/cerebro1.js';
 import {
+  arquivarProcesso,
   cadastrarProcesso,
   clearPendingAction,
   consultarProcesso,
   criarCompromisso,
+  deleteCompromisso,
+  findCompromissos,
+  findProcessos,
+  getCompromissoById,
   getPendingAction,
+  getProcessoById,
   listarCompromissos,
   listarProcessos,
   resolveProcessoIdByCnj,
   savePendingAction,
+  updateCompromisso,
+  updateProcesso,
   upsertClienteByNome,
 } from '../../infra/db/cerebro1-store.js';
 
@@ -24,6 +32,14 @@ export const supabaseCerebro1Store: Cerebro1Store = {
   cadastrarProcesso,
   listarProcessos,
   consultarProcesso,
+  findCompromissos,
+  getCompromissoById,
+  updateCompromisso,
+  deleteCompromisso,
+  findProcessos,
+  getProcessoById,
+  updateProcesso,
+  arquivarProcesso,
 };
 
 export const supabasePendingStore: PendingActionStore = {
