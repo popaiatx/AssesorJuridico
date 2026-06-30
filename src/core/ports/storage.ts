@@ -15,7 +15,10 @@ export interface PutDocumentInput {
 
 export interface StoragePort {
   putDocument(input: PutDocumentInput): Promise<{ storageRef: string }>;
-  /** URL assinada com expiração curta, gerada sob demanda. */
+  /** Baixa os bytes de um documento. O `storageRef` SÓ deve vir de uma linha já
+   *  verificada como do dono (tabela `documentos`/RLS) — nunca do usuário. */
+  getDocument(storageRef: string): Promise<Uint8Array>;
+  /** URL assinada com expiração curta, gerada sob demanda (idem dono verificado). */
   getSignedUrl(storageRef: string, expiresInSeconds: number): Promise<string>;
   deleteDocument(storageRef: string): Promise<void>;
 }

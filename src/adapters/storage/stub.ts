@@ -14,6 +14,9 @@ export class StubStorageAdapter implements StoragePort {
   putDocument(_input: PutDocumentInput): Promise<{ storageRef: string }> {
     throw new NotImplementedError(PENDENTE);
   }
+  getDocument(_storageRef: string): Promise<Uint8Array> {
+    throw new NotImplementedError(PENDENTE);
+  }
   getSignedUrl(_storageRef: string, _expiresInSeconds: number): Promise<string> {
     throw new NotImplementedError(PENDENTE);
   }

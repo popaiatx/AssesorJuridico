@@ -71,6 +71,11 @@ const envSchema = z.object({
   LEMBRETES_GRACE_MIN: z.coerce.number().int().positive().default(60),
   // Fuso para EXIBIR a hora no texto do lembrete (a comparação é em UTC).
   LEMBRETES_TIMEZONE: z.string().default('America/Sao_Paulo'),
+
+  // Documentos (Passo 12A). Bucket PRIVADO; link assinado curto; limite de tamanho.
+  DOCUMENTOS_BUCKET: z.string().default('documentos'),
+  DOCUMENTOS_URL_TTL_SEC: z.coerce.number().int().positive().default(300),
+  DOCUMENTOS_MAX_MB: z.coerce.number().int().positive().default(20),
 });
 
 export type Config = z.infer<typeof envSchema>;
