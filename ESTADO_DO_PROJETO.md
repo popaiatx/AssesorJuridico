@@ -5,7 +5,8 @@
 > no git. Atualizado ao final de cada passo, antes do push.
 >
 > Mapa prático de módulos e como testar: [`GUIA.md`](GUIA.md). Roteiros de
-> ingestão/sync e validação A/B/C: [`README.md`](README.md).
+> ingestão/sync e validação A/B/C: [`README.md`](README.md). Visão de produto em
+> linguagem simples (uso + roadmap): [`MANUAL_DO_ASSESSOR.md`](MANUAL_DO_ASSESSOR.md).
 
 ## Fase atual
 
