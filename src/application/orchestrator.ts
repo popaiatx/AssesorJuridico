@@ -12,6 +12,7 @@
  *
  * Não depende de WhatsApp real nem de LLM; tudo via ports injetados.
  */
+import { isWarm, trimTurnos, type RecentContext } from '../core/domain/conversation/memory.js';
 import type { Intent } from '../core/domain/intents.js';
 import { INTENT_LABEL } from '../core/domain/intents.js';
 import type {
@@ -19,6 +20,10 @@ import type {
   HandlerRegistry,
   MessageContext,
 } from '../core/orchestration/handler.js';
+import type {
+  ConversationMemoryStore,
+  ConversationTurn,
+} from '../core/ports/conversation-memory.js';
 import type { IntentClassifier } from '../core/ports/intent-classifier.js';
 import type { InteractionLogPort } from '../core/ports/interaction-log.js';
 import type { SubscriptionGate } from '../core/ports/subscription-gate.js';
@@ -48,6 +53,10 @@ export interface OrchestratorDeps {
   gate?: SubscriptionGate;
   /** Handler de pagamento, acionado quando o porteiro bloqueia. */
   paymentRequiredHandler?: BlockedHandler;
+  /** Memória de conversa (opcional). Sem ela, o fluxo é idêntico ao atual. */
+  memory?: ConversationMemoryStore;
+  /** Config da memória; sem ela (ou enabled=false), a memória fica inativa. */
+  memoriaConfig?: { enabled: boolean; turnos: number; ttlMin: number };
   /** Relógio injetável (default: agora). */
   clock?: () => Date;
 }
@@ -81,7 +90,12 @@ export class Orchestrator {
       }
     }
 
-    const result = await this.deps.classifier.classify(message.text);
+    // Memória de conversa (se ativa e quente): cauda curta p/ interpretar a mensagem.
+    const memoriaTurnos = await this.loadWarmMemory(assinanteId);
+    const recentContext: RecentContext | undefined =
+      memoriaTurnos.length > 0 ? { turnos: memoriaTurnos } : undefined;
+
+    const result = await this.deps.classifier.classify(message.text, recentContext);
 
     // Ambíguo: pergunta em vez de adivinhar. Nenhum handler de negócio acionado.
     if (result.ambiguous) {
@@ -91,9 +105,45 @@ export class Orchestrator {
     }
 
     const intent = result.intent;
-    const handled = await this.runHandler(intent, { assinanteId, intent, message });
+    const ctx: MessageContext = recentContext
+      ? { assinanteId, intent, message, recentContext }
+      : { assinanteId, intent, message };
+    const handled = await this.runHandler(intent, ctx);
     await this.record(assinanteId, intent, handled);
+    await this.appendMemory(assinanteId, memoriaTurnos, intent, handled);
     return { assinanteId, intent, ambiguous: false, replyText: handled.replyText };
+  }
+
+  /** Lê a memória; se fria (TTL) ou inativa, devolve [] (e limpa a fria). */
+  private async loadWarmMemory(assinanteId: string): Promise<ConversationTurn[]> {
+    const memory = this.deps.memory;
+    const cfg = this.deps.memoriaConfig;
+    if (!memory || !cfg?.enabled) return [];
+    const stored = await memory.load(assinanteId);
+    if (!isWarm(stored.atualizadoEm, this.now(), cfg.ttlMin)) {
+      if (stored.turnos.length > 0) await memory.clear(assinanteId);
+      return [];
+    }
+    return trimTurnos(stored.turnos, cfg.turnos);
+  }
+
+  /** Anexa o turno do usuário + do assistente (só intenção + citações públicas). */
+  private async appendMemory(
+    assinanteId: string,
+    anteriores: ConversationTurn[],
+    intent: Intent,
+    handled: HandlerResult,
+  ): Promise<void> {
+    const memory = this.deps.memory;
+    const cfg = this.deps.memoriaConfig;
+    if (!memory || !cfg?.enabled) return;
+    const em = this.now().toISOString();
+    const novos: ConversationTurn[] = [
+      { papel: 'user', intent, em },
+      { papel: 'assistant', intent, fontes: handled.fontesCitadas ?? [], em },
+    ];
+    const turnos = trimTurnos([...anteriores, ...novos], cfg.turnos);
+    await memory.save(assinanteId, turnos);
   }
 
   private now(): Date {

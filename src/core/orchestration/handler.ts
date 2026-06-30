@@ -2,6 +2,7 @@
  * Contrato de um handler de intenção. O registro mapeia cada `Intent` para
  * EXATAMENTE um handler; o orquestrador chama um só (um-cérebro-por-mensagem).
  */
+import type { RecentContext } from '../domain/conversation/memory.js';
 import type { Cerebro, Intent } from '../domain/intents.js';
 import type { InboundMessage } from '../ports/whatsapp.js';
 
@@ -10,6 +11,11 @@ export interface MessageContext {
   assinanteId: string | null;
   intent: Intent;
   message: InboundMessage;
+  /**
+   * Memória de conversa recente (cauda curta, só intenção + citações públicas) para
+   * interpretar a mensagem. NUNCA é fonte de afirmação jurídica. Ausente = sem memória.
+   */
+  recentContext?: RecentContext;
 }
 
 export interface HandlerResult {

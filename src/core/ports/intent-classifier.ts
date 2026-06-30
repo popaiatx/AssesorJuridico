@@ -3,6 +3,7 @@
  * (palavras-chave), sem LLM. A interface é assíncrona para, no futuro, permitir
  * um classificador via `LlmPort` sem mudar o orquestrador.
  */
+import type { RecentContext } from '../domain/conversation/memory.js';
 import type { Intent } from '../domain/intents.js';
 
 export interface ClassificationResult {
@@ -17,5 +18,9 @@ export interface ClassificationResult {
 }
 
 export interface IntentClassifier {
-  classify(text: string): Promise<ClassificationResult>;
+  /**
+   * Classifica a intenção. `recentContext` (opcional) é a memória de conversa para
+   * desambiguar follow-ups curtos; implementações determinísticas podem ignorá-lo.
+   */
+  classify(text: string, recentContext?: RecentContext): Promise<ClassificationResult>;
 }
