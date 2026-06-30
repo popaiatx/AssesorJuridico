@@ -23,6 +23,7 @@
     "send:lembretes": "tsx scripts/send-lembretes.ts",
     "doc:process": "tsx scripts/doc-process.ts",
     "doc:reindex": "tsx scripts/doc-reindex.ts",
+    "doc:search": "tsx scripts/doc-search.ts",
     "ask:rag": "tsx scripts/ask-rag.ts",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",

@@ -423,6 +423,53 @@ npm run doc:process -- ./intimacao.pdf --telefone 5511999990001 --acao salvar --
 > O **download da mídia do WhatsApp** (receber o arquivo pelo Zap) depende do chip —
 > o código está pronto (`MediaDownloader`), validação manual pendente.
 
+## Busca de documentos (Passo 12B)
+
+Encontrar um documento guardado **sem lembrar o nome do arquivo** — por referência
+**exata** (número de protocolo/processo, nome de pessoa, trecho) **ou vaga** (assunto,
+"aquele contrato de aluguel"). A busca **acha e lista** (devolve o documento com link);
+não re-resume nem reprocessa.
+
+- **Duas buscas combinadas:**
+  1. **Exata** — `ILIKE` dos termos da referência em `busca_texto`/`nome` (casa
+     fragmentos de número, ex.: parte de um protocolo).
+  2. **Semântica** — embedding da referência comparado aos embeddings dos documentos
+     **do próprio assinante** (pgvector, distância de cosseno). Exige `EMBEDDINGS_*`;
+     sem ela, funciona só a exata.
+  Combina com **prioridade da exata**, deduplica e devolve o **Top N**
+  (`DOCUMENTOS_BUSCA_TOPN`, default 5). A semântica tem **piso de similaridade**
+  (`DOCUMENTOS_BUSCA_MIN_SIM`) para não trazer "qualquer coisa parecida".
+- **Embedding do documento:** gerado do `busca_texto` **na guarda** (12A). Documento
+  escaneado/sem texto fica **sem embedding** (achável só pela exata) e entra na contagem
+  de **ponto cego**, avisada nos resultados. Backfill de acervo antigo: `doc:reindex`.
+- **Isolamento (sigilo):** o `assinante_id` vem **sempre da identidade** (telefone
+  autenticado), nunca do texto/IA. O filtro `where assinante_id = <identidade>` faz parte
+  da **própria query** (exata **e** semântica), aplicado **antes** do `ILIKE`/operador
+  vetorial — o vetor de outro assinante **nunca** é sequer comparado. **RLS force** é o
+  backstop. A **URL assinada** só é gerada para documentos que vieram da query escopada
+  (dono confirmado); nunca a partir de um `id`/`storage_ref` solto.
+
+### Testar pela CLI (sem chip)
+
+Pré-requisitos: como no 12A (bucket privado, `.env`, assinante de teste). Para a
+**semântica**, também `EMBEDDINGS_*`. Antes da primeira busca em acervo já existente,
+rode o backfill de embeddings:
+
+```bash
+# (1) Backfill: gera o embedding dos documentos que ainda não têm (idempotente).
+npm run doc:reindex
+# ou em lotes maiores:
+npm run doc:reindex -- --lote 50
+
+# (2) Buscar como o dono <telefone> (roda o handler real: exata + semântica + link).
+npm run doc:search -- --telefone 5511999990001 "contrato de aluguel do João"
+npm run doc:search -- --telefone 5511999990001 "5551"   # fragmento de protocolo
+```
+
+> **Validar o isolamento sem chip:** processe documentos para **dois** assinantes
+> (`doc:process` com telefones diferentes) e rode `doc:search` com cada telefone — cada
+> um só enxerga os próprios documentos; a referência de um **nunca** traz o do outro.
+
 ## Webhook do WhatsApp (Cloud API)
 
 Entrada real do produto. Só é registrado se as `WHATSAPP_*` estiverem

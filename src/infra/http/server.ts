@@ -50,8 +50,13 @@ import { supabaseStorage } from '../../adapters/storage/supabase-storage.js';
 import { WhatsappMediaDownloader } from '../../adapters/whatsapp/whatsapp-media-downloader.js';
 import { DocumentoService } from '../../application/documentos/documento-service.js';
 import { DocumentHandler } from '../../application/documentos/document-handler.js';
+import { BuscarDocumentos } from '../../application/documentos/buscar-documentos.js';
+import { DocumentSearchHandler } from '../../application/documentos/document-search-handler.js';
 import { resolveProcessoIdByCnj } from '../db/cerebro1-store.js';
 import {
+  buscarDocumentosExato,
+  buscarDocumentosSemantico,
+  contarDocumentosSemTexto,
   documentoPendenteDecisao,
   getDocumentoById,
   gravarConteudoDocumento,
@@ -179,6 +184,28 @@ function registerWhatsapp(app: FastifyInstance): void {
         });
       };
       app.log.info('Documentos (12A) ativos — leitura/resumo/guarda');
+
+      // Busca de documentos (12B): intent `documento` por texto. Funciona só com
+      // a busca exata; com embeddings, soma a semântica. Escopo por tenant na query.
+      const buscaDocs = new BuscarDocumentos({
+        store: {
+          buscarExato: buscarDocumentosExato,
+          buscarSemantico: buscarDocumentosSemantico,
+          contarSemTexto: contarDocumentosSemTexto,
+        },
+        ...(embeddings ? { embeddings } : {}),
+        topN: config.DOCUMENTOS_BUSCA_TOPN,
+        minSimilarity: config.DOCUMENTOS_BUSCA_MIN_SIM,
+        logger: app.log,
+      });
+      overrides.documento = new DocumentSearchHandler({
+        busca: buscaDocs,
+        storage: supabaseStorage,
+        urlTtlSec: config.DOCUMENTOS_URL_TTL_SEC,
+      });
+      app.log.info(
+        `Busca de documentos (12B) ativa — ${embeddings ? 'exata + semântica' : 'só exata (sem embeddings)'}`,
+      );
     } else {
       app.log.warn('SUPABASE_SERVICE_ROLE_KEY ausente — documentos (12A) inativos (placeholder)');
     }

@@ -76,8 +76,7 @@ automático ao agendar.
 ### 5. Receber e organizar documentos
 **O que faz:** você manda um arquivo (PDF, Word, texto) e ele **resume, guarda, ou os
 dois** — e, ao guardar, sempre anota as **informações-chave** (tipo, partes, números,
-datas, assunto) para você **encontrar o documento depois** (a busca em si chega no
-próximo passo).
+datas, assunto) para você **encontrar o documento depois**.
 
 **Exemplos:**
 - Você manda um PDF com a legenda *"resume isso"* → ele responde com o resumo.
@@ -85,7 +84,27 @@ próximo passo).
 - Você manda um contrato com *"guarda no processo 0001234-…"* → ele guarda vinculado ao processo.
 - Se for **foto ou PDF escaneado** (sem texto), ele avisa com honestidade: guarda o arquivo, mas diz que **não conseguiu ler o conteúdo** — então esse documento **não poderá ser achado por conteúdo** depois (só por nome/data). Ele nunca "inventa" o que não leu.
 
-### 6. Cadastro e acesso
+### 6. Encontrar um documento guardado (busca)
+**O que faz:** você pede um documento **sem lembrar o nome do arquivo** — por um detalhe
+**exato** (um número de protocolo/processo, o nome de uma pessoa, um trecho) **ou** por
+algo **vago** (o assunto, *"aquele contrato de aluguel"*). Ele procura no **seu** acervo
+de duas formas ao mesmo tempo — pelo **texto/número** e pelo **significado** — e devolve
+os documentos mais prováveis com um **link para abrir**.
+
+**Exemplos:**
+- *"acha o contrato de aluguel do João"* → ele lista o(s) contrato(s) que batem, com link.
+- *"me manda o documento do protocolo 5551"* → acha pelo pedaço do número.
+- *"aquela procuração que guardei mês passado"* → acha pelo assunto, mesmo sem o nome.
+
+**Importante:**
+- A busca é **só sua**: ele nunca mostra documento de outra pessoa — cada conta enxerga
+  apenas os próprios arquivos.
+- Documento que entrou como **foto/escaneado** (sem texto) **não aparece** na busca por
+  conteúdo; quando isso for o caso, ele avisa quantos você tem assim e se oferece para
+  procurar por nome ou data.
+- Ele **acha e entrega** o documento — não refaz o resumo (é só pedir, se quiser).
+
+### 7. Cadastro e acesso
 **O que faz:** quem é novo simplesmente **manda a primeira mensagem** no WhatsApp. O
 assessor dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pessoa ganha
 **3 dias de teste grátis**. Depois do teste, para continuar usando é preciso
@@ -96,9 +115,8 @@ assessor dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pessoa
 ## Parte 3 — O que ele ainda NÃO faz (e o que vem por aí)
 
 - **Entender áudios** (mensagem de voz) — *(planejado, deixado para o final)*
-- **Encontrar documentos por conteúdo** (achar por um nome, pedaço de número ou
-  assunto, sem lembrar o arquivo) — *(é o próximo passo, 12B; o 12A já guarda as
-  informações-chave que tornam isso possível)*.
+- **Ler documentos escaneados/fotos** (OCR) — hoje ele avisa quando não consegue ler;
+  esses arquivos ficam fora da busca por conteúdo.
 - **Ler imagens / PDF escaneado** (OCR) — hoje ele avisa que não consegue; *(planejado)*.
 - **Jurisprudência** (decisões de tribunais, súmulas) no acervo de consulta — hoje só
   legislação; jurisprudência virá por um provedor especializado. *(em breve)*
@@ -143,7 +161,7 @@ modelo de mensagem junto à Meta).
 
 ### Produção de documentos
 - ✓ **Receber, ler e resumir documentos (PDF/Word/texto)** — extrair o essencial e guardar com informações-chave.
-- ▶ **Encontrar documentos por conteúdo** (busca) — achar sem lembrar o nome do arquivo (12B).
+- ✓ **Encontrar documentos por conteúdo** (busca) — achar por número/nome/trecho ou por assunto, sem lembrar o nome do arquivo.
 - ▶ **OCR (ler imagens / PDF escaneado)** — hoje avisa que não consegue.
 - ▶ **Sugerir prazo a partir de uma intimação** — da leitura à agenda, automático.
 - ▶ **Rascunho de peças** (com revisão obrigatória, sem citar o que não foi verificado) — acelerar a redação.
@@ -184,7 +202,7 @@ modelo de mensagem junto à Meta).
 | Cadastro + 3 dias de teste + assinatura | ✅ Sim | Sim | Fluxo real acontece pelo WhatsApp |
 | Editar/cancelar compromissos; editar/arquivar processos | ✅ Sim | Sim | Confirma mostrando o registro real; remarcar reprograma lembretes; processo é arquivado, não apagado |
 | Receber/ler/resumir/guardar documentos (PDF/Word/texto) | ✅ Sim | Recebimento pelo Zap depende do chip | Guarda com informações-chave; PDF-imagem avisa que não leu |
-| Encontrar documentos por conteúdo (busca) | ❌ Ainda não | — | Próximo passo (12B) |
+| Encontrar documentos por conteúdo (busca) | ✅ Sim | Para uso real, sim | Por número/nome/trecho ou por assunto; só os seus; validável internamente |
 | Entender áudios | ❌ Ainda não | — | Planejado (por último) |
 | Jurisprudência (decisões/súmulas) | ❌ Ainda não | — | Em breve (provedor especializado) |
 | Andamento processual (tribunais) | ❌ Ainda não | — | Planejado |

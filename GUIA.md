@@ -43,6 +43,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | **Memória de conversa** | Mantém o fio do assunto entre mensagens (resolve "dela", "o artigo seguinte") só para interpretar; nunca é fonte; por tenant, com janela e expiração. |
 | **Lembrete proativo** | Job agendado avisa o advogado antes de audiências/prazos (24h e 1h antes), idempotente, no fuso de Brasília, via template aprovado. |
 | **Documentos (12A)** | Recebe arquivo, decide (resumir/salvar/ambos), lê o texto e guarda com informações-chave (para achar depois); bucket privado isolado por tenant. |
+| **Busca de documentos (12B)** | Acha um documento guardado por referência exata (número/nome/trecho) ou vaga (assunto), combinando busca textual + semântica; só do próprio assinante; devolve link assinado. |
 
 ---
 
@@ -111,6 +112,14 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Testar — automatizado:** `tests/documentos-extract.test.ts`, `tests/documentos-ia.test.ts`, `tests/documento-service.test.ts` (inclui **isolamento de arquivo** com 2 assinantes).
 - **Testar — manual SEM chip (CLI):** `npm run doc:process -- <arquivo> --telefone <tel> [--acao resumir|salvar|ambos] [--processo <CNJ>]`. **Recebimento pelo WhatsApp (download da mídia) = PENDENTE (chip).**
 
+### 10. Busca de documentos (12B)
+- **Faz:** acha um documento guardado por referência **exata** (protocolo/processo, nome, trecho, fragmento de número) **ou vaga** (assunto, "aquele contrato de aluguel"), **sem** lembrar o nome do arquivo. Combina busca **exata** (`ILIKE`) + **semântica** (embedding × pgvector), prioriza a exata, deduplica e devolve o **Top N** (5). Só **acha e lista** (com link assinado); não re-resume. Avisa o **ponto cego** (documentos escaneados sem texto).
+- **Arquivos:** `src/core/domain/documentos/busca.ts` (tokens), `src/application/documentos/buscar-documentos.ts` (combinação), `src/application/documentos/document-search-handler.ts` (handler do intent `documento`), `src/infra/db/documentos-store.ts` (queries escopadas + backfill), migração `0024` (coluna `embedding` + índice HNSW).
+- **Config (.env):** `DOCUMENTOS_BUSCA_TOPN` (5), `DOCUMENTOS_BUSCA_MIN_SIM` (0.3), `EMBEDDINGS_*` (semântica; sem ela = só exata).
+- **Sigilo (isolamento):** `assinante_id` vem **sempre da identidade**; filtro de tenant **embutido na query** (exata e semântica), **antes** do `ILIKE`/operador vetorial; **RLS force** de backstop; URL assinada só para doc que veio da query escopada (dono confirmado). O vetor de outro assinante nunca é comparado.
+- **Testar — automatizado:** `tests/buscar-documentos.test.ts` (tokens; combinação/Top N; fallback sem embeddings; **isolamento exaustivo com 2 assinantes** — A nunca vê o de B nem sendo o vetor mais próximo; número só-de-B → vazio; ponto cego conta só A; handler só assina a URL do dono). Isolamento também validado em **Postgres real (RLS)**.
+- **Testar — manual SEM chip (CLI):** `npm run doc:reindex` (backfill de embeddings, idempotente) → `npm run doc:search -- --telefone <tel> "<referência>"`. Rode com telefones de **dois** assinantes para provar o isolamento.
+
 ---
 
 ## Comandos úteis (scripts npm)
@@ -129,6 +138,8 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | `npm run send:lembretes -- --dry-run [--now "<ISO>"]` | Lista os lembretes que enviaria (sem enviar/marcar); `--now` simula o horário. | Validar a lógica do **lembrete** sem chip. |
 | `npm run send:lembretes` | Envia os lembretes devidos (real; precisa WHATSAPP_* + template aprovado). | É o que o Railway Cron roda a cada 15 min. |
 | `npm run doc:process -- <arquivo> --telefone <tel> [--acao …] [--processo …]` | Processa um documento local (resumir/salvar/ambos) pelo caminho real. | Validar documentos (12A) sem chip. |
+| `npm run doc:reindex [-- --lote N]` | **Backfill** dos embeddings de documentos sem vetor (idempotente; back-office). | Preparar a busca semântica em acervo já existente (12B). |
+| `npm run doc:search -- --telefone <tel> "<referência>"` | Busca documentos pelo caminho real (exata + semântica; link assinado). | Validar a busca e o **isolamento** (12B) sem chip. |
 | `npm run seed:assinante -- <tel>` | Cria/atualiza um assinante de teste (admin). | Destravar testes sem onboarding. |
 | `npm run reset:assinante -- <tel>` | Remove o assinante (cascata) + limpa onboarding. | Refazer o fluxo de número novo. |
 | `npm run trial:expire -- <tel>` | Vence o trial (coloca `trial_fim` no passado). | Testar o bloqueio pós-trial. |
@@ -156,9 +167,10 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | Lembrete proativo — lógica/seleção/idempotência | ✅ | ✅ validável por `--dry-run` | **Não** — valida em dry-run |
 | Lembrete proativo — envio real + template Meta | ✅ (código) | ❌ PENDENTE | **Sim** (chip + aprovação) |
 | Documentos (12A) — ler/resumir/guardar + chaves | ✅ | ✅ validável por `doc:process` | **Não** — valida pela CLI (bucket privado no Supabase) |
+| Documentos (12B) — buscar (exata + semântica) + isolamento | ✅ | ✅ validável por `doc:reindex` + `doc:search` | **Não** — valida pela CLI (isolamento provado em testes + Postgres real) |
 | Documentos — receber pelo WhatsApp (download da mídia) | ✅ (código) | ❌ PENDENTE | **Sim** (chip) |
 | Documentos — PDF-imagem/foto (OCR) | ❌ Ainda não | — | Avisa e marca `sem_texto` (ponto cego da busca) |
-| Migrações 0019 (sync) / 0020 (memória) / 0021 (lembrete) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |
+| Migrações 0019 (sync) / 0020 (memória) / 0021 (lembrete) / 0024 (embedding doc) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |
 
 **Resumo do que dá para validar JÁ, sem chip:** (1) **Cérebro 2** ponta a ponta pela
 CLI (`ingest:corpus` → `ask:rag` com A/B/C); (2) **pagamento Asaas no sandbox**

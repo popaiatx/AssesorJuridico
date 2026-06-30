@@ -26,10 +26,14 @@
   escopada por tenant, desambiguação numerada, confirmação reforçada na remoção e
   recálculo de lembretes na remarcação. Concluído também o **Passo 12A — documentos**
   (receber/decidir/ler/resumir/guardar com informações-chave; bucket privado isolado
-  por tenant; validável pela CLI `doc:process`). Falta **agendar os Crons no Railway**
-  (sync semanal + lembretes 15 min), **aprovar o template `lembrete_generico` na Meta**,
-  **criar o bucket `documentos`** e **validar pelo WhatsApp** (download de mídia, chip).
-  Próximo: **12B — busca de documentos**; depois jurisprudência ou Cérebro 3.
+  por tenant; validável pela CLI `doc:process`). Concluído também o **Passo 12B — busca
+  de documentos** (achar por referência exata e/ou semântica, sem lembrar o nome do
+  arquivo; embedding-on-write + backfill `doc:reindex`; isolamento por tenant embutido
+  na query — exata e semântica — com RLS de backstop; validável pelas CLIs `doc:reindex`
+  + `doc:search`). Falta **agendar os Crons no Railway** (sync semanal + lembretes 15
+  min), **aprovar o template `lembrete_generico` na Meta**, **criar o bucket
+  `documentos`** e **validar pelo WhatsApp** (download de mídia, chip).
+  Próximo: **jurisprudência** ou **Cérebro 3 (tribunais)**.
   Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B) — pelo chip.
 
 ## O que já está pronto
@@ -161,6 +165,21 @@
   caminho `${assinante}/${id}/…`, URL assinada curta); **isolamento do arquivo**: posse
   decidida na tabela (RLS), service_role só toca o arquivo. CLI `npm run doc:process`.
   `MediaDownloader` (WhatsApp) pronto — download depende do chip. **265 testes verdes.**
+- **Passo 12B — busca de documentos (achar sem lembrar o nome do arquivo).** Migração
+  0024 (coluna `embedding vector(1536)` + índice HNSW cosine). **Duas buscas
+  combinadas**: EXATA (`ILIKE` por token em `busca_texto`/`nome`, casa fragmento de
+  número) + SEMÂNTICA (embedding da referência × embeddings dos docs do tenant, pgvector
+  `<=>`), com **prioridade da exata**, dedup e **Top N=5** (`DOCUMENTOS_BUSCA_TOPN`);
+  semântica com piso `DOCUMENTOS_BUSCA_MIN_SIM=0.3` (vizinho irrelevante fora) e
+  resiliente (sem embeddings/erro → só exata). **Embedding-on-write**: gerado do
+  `busca_texto` na guarda (12A); falha não perde o doc (loga, guarda sem vetor).
+  **Backfill** `doc:reindex` (idempotente, back-office via pool) para acervo antigo.
+  Handler do intent `documento` (texto) gera **URL assinada só de doc que veio da query
+  escopada** (dono confirmado). **ISOLAMENTO**: `assinante_id` SEMPRE da identidade;
+  filtro `where assinante_id` **embutido na query** (exata e semântica), antes do
+  `ILIKE`/`<=>`; **RLS force** backstop. CLIs `npm run doc:reindex` + `npm run
+  doc:search`. Isolamento provado por testes (2 tenants) **e em Postgres real (RLS,
+  pgvector)**. **282 testes verdes.**
 
 ## Decisões técnicas-chave
 
@@ -262,9 +281,10 @@
 - **Validar em produção** (acumulado): Cérebro 1, pagamento sandbox (6B), RAG.
 - **Onboarding — verificação real da inscrição na OAB** contra fonte externa
   (removida do fluxo obrigatório; pode virar opção futura).
-- **Documentos:** **12B — busca** (achar por referência vaga/listar/repedir resumo);
-  **OCR** de imagem/PDF escaneado; criar o **bucket `documentos`** no Supabase;
-  **download de mídia pelo WhatsApp** (código pronto, valida com o chip).
+- **Documentos:** **busca (12B) — FEITA**, validável por `doc:reindex` + `doc:search`.
+  PENDENTE: **OCR** de imagem/PDF escaneado (ponto cego da busca); criar o **bucket
+  `documentos`** no Supabase; **download de mídia pelo WhatsApp** (código pronto, valida
+  com o chip). Eventual: repedir o resumo a partir de um resultado da busca.
 - **WhatsApp:** **download de mídia** (mídia recebida hoje → placeholder até o chip);
   template aprovado na Meta.
 - **Fila durável do webhook** (ack rápido + worker) — caminho de escala.
@@ -281,13 +301,11 @@
 
 ## Próximos passos previstos
 
-1. **12B — busca de documentos** (achar por referência vaga; usa `busca_texto`/`chaves`
-   já guardados pelo 12A).
-2. **Agendar os Railway Crons** (sync semanal + lembretes 15 min), **aprovar o template
+1. **Agendar os Railway Crons** (sync semanal + lembretes 15 min), **aprovar o template
    na Meta**, **criar o bucket `documentos`** e **validar pelo WhatsApp** (memória, C1,
    RAG, lembrete, documentos) quando houver chip; pagamento sandbox (6B).
-3. **Jurisprudência — agregador pago** ou **Cérebro 3 (tribunais)**; financeiro
-   (honorários/custos); OCR de documentos.
+2. **Jurisprudência — agregador pago** ou **Cérebro 3 (tribunais)**.
+3. Financeiro (honorários/custos); **OCR** de documentos (fecha o ponto cego da busca).
 
 ## Como rodar
 
