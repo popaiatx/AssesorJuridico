@@ -25,6 +25,11 @@ export interface HandlerResult {
   cerebro?: Cerebro;
   /** Fontes citadas (RAG) — gravadas no log de interação. */
   fontesCitadas?: string[];
+  /**
+   * Ids (UUID) dos documentos listados nesta resposta, em ordem (Passo 12C). O
+   * orquestrador os guarda na memória para resolver "resume o segundo" depois.
+   */
+  documentosListados?: string[];
 }
 
 export interface IntentHandler {

@@ -45,3 +45,16 @@ export function intentRecente(turnos: ConversationTurn[]): string | null {
   }
   return null;
 }
+
+/**
+ * Última lista de documentos exibida (Passo 12C), para resolver "resume o segundo".
+ * Pega o `docIds` do turno do assistente mais recente que listou documentos. Vazio
+ * se não houver lista recente (ex.: memória esfriou) — o handler então não adivinha.
+ */
+export function ultimaListaDocumentos(turnos: ConversationTurn[]): string[] {
+  for (let i = turnos.length - 1; i >= 0; i--) {
+    const ids = turnos[i]!.docIds;
+    if (ids && ids.length > 0) return ids;
+  }
+  return [];
+}

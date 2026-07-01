@@ -207,12 +207,30 @@ class FakeStorage implements StoragePort {
   }
 }
 
-function ctxDe(assinanteId: string | null, text: string): MessageContext {
-  return {
+// Resumidor fake: registra as chamadas e devolve um texto marcado com o id/pedido.
+class FakeResumo {
+  calls: Array<{ id: string; pedido?: { modo?: string; foco?: string } }> = [];
+  resumirPorId(_assinante: string, id: string, pedido?: { modo?: string; foco?: string }): Promise<string> {
+    this.calls.push({ id, ...(pedido ? { pedido } : {}) });
+    return Promise.resolve(`RESUMO[${id}]${pedido?.foco ? ` foco=${pedido.foco}` : ''}`);
+  }
+}
+
+function ctxDe(
+  assinanteId: string | null,
+  text: string,
+  docIds?: string[],
+): MessageContext {
+  const base: MessageContext = {
     assinanteId,
     intent: 'documento',
     message: { messageId: 'm1', from: '551199', text, timestamp: '2026-01-01T00:00:00Z' },
   };
+  // Simula a memória: última lista de documentos exibida (turno do assistente).
+  if (docIds) {
+    return { ...base, recentContext: { turnos: [{ papel: 'assistant', intent: 'documento', docIds, em: '2026-01-01T00:00:00Z' }] } };
+  }
+  return base;
 }
 
 describe('DocumentSearchHandler', () => {
@@ -225,8 +243,9 @@ describe('DocumentSearchHandler', () => {
   function build(emb: number[] = [1, 0, 0]) {
     const store = new FakeSearchStore(docs);
     const storage = new FakeStorage();
+    const resumo = new FakeResumo();
     const busca = new BuscarDocumentos({ store, embeddings: new FakeEmbeddings(emb), topN: 5, minSimilarity: 0.3, logger: { error: () => {} } });
-    return { handler: new DocumentSearchHandler({ busca, storage, urlTtlSec: 300 }), storage };
+    return { handler: new DocumentSearchHandler({ busca, resumo, storage, urlTtlSec: 300 }), storage, resumo };
   }
 
   it('lista o doc de A com link assinado e avisa o ponto cego; nunca assina o de B', async () => {
@@ -253,5 +272,63 @@ describe('DocumentSearchHandler', () => {
     const r = await handler.handle(ctxDe(null, 'contrato'));
     expect(r.replyText.toLowerCase()).toContain('identificar');
     expect(storage.signCalls).toHaveLength(0);
+  });
+
+  // --- 12C: resumir ---
+  it('busca devolve documentosListados (ordem) para o "resume o N" seguinte', async () => {
+    const { handler } = build();
+    const r = await handler.handle(ctxDe('A', 'acha o contrato de aluguel'));
+    expect(r.documentosListados).toEqual(['a1']); // só o de A
+  });
+
+  it('"resume o segundo" resolve pela lista da última busca (memória)', async () => {
+    const { handler, resumo } = build();
+    const r = await handler.handle(ctxDe('A', 'resume o segundo', ['x1', 'x2', 'x3']));
+    expect(resumo.calls.map((c) => c.id)).toEqual(['x2']);
+    expect(r.replyText).toContain('RESUMO[x2]');
+  });
+
+  it('"resume o segundo" SEM lista recente: não adivinha, pede para buscar', async () => {
+    const { handler, resumo } = build();
+    const r = await handler.handle(ctxDe('A', 'resume o segundo')); // sem memória
+    expect(resumo.calls).toHaveLength(0);
+    expect(r.replyText.toLowerCase()).toContain('busque primeiro');
+  });
+
+  it('"resume o contrato ... focando nos prazos": modo novo + foco, doc único', async () => {
+    const { handler, resumo } = build();
+    const r = await handler.handle(ctxDe('A', 'resume o contrato focando nos prazos'));
+    expect(resumo.calls).toHaveLength(1);
+    expect(resumo.calls[0]!.id).toBe('a1');
+    expect(resumo.calls[0]!.pedido?.foco).toBe('prazos');
+    expect(r.replyText).toContain('foco=prazos');
+  });
+
+  it('resumir referência que não casa nada: mensagem clara, sem resumir', async () => {
+    const { handler, resumo } = build([0, 0, 1]); // semântica fora do piso
+    const r = await handler.handle(ctxDe('A', 'resume o do gabriel'));
+    expect(resumo.calls).toHaveLength(0);
+    expect(r.replyText.toLowerCase()).toContain('não achei');
+  });
+
+  it('resumir referência que casa VÁRIOS: desambigua numerado e guarda a ordem', async () => {
+    const many = [
+      doc({ id: 'a1', assinanteId: 'A', nome: 'contrato-1.pdf', buscaTexto: 'contrato de aluguel joao', vetor: [0, 0, 0] }),
+      doc({ id: 'a3', assinanteId: 'A', nome: 'contrato-2.pdf', buscaTexto: 'contrato de aluguel maria', vetor: [0, 0, 0] }),
+    ];
+    const busca = new BuscarDocumentos({ store: new FakeSearchStore(many), topN: 5, minSimilarity: 0.3, logger: { error: () => {} } });
+    const resumo = new FakeResumo();
+    const handler = new DocumentSearchHandler({ busca, resumo, storage: new FakeStorage(), urlTtlSec: 300 });
+    const r = await handler.handle(ctxDe('A', 'resume o contrato de aluguel'));
+    expect(r.replyText.toLowerCase()).toContain('qual');
+    expect(r.documentosListados).toEqual(['a1', 'a3']);
+    expect(resumo.calls).toHaveLength(0); // ainda não resumiu
+  });
+
+  it('ISOLAMENTO: ordinal nunca resolve para doc de B (lista da memória é só de A)', async () => {
+    const { handler, resumo } = build();
+    // A memória de A só teria ids de A; ainda assim o serviço re-verifica posse.
+    await handler.handle(ctxDe('A', 'resume o primeiro', ['a1']));
+    expect(resumo.calls.map((c) => c.id)).toEqual(['a1']); // nunca um id de B
   });
 });

@@ -51,6 +51,7 @@ import { WhatsappMediaDownloader } from '../../adapters/whatsapp/whatsapp-media-
 import { DocumentoService } from '../../application/documentos/documento-service.js';
 import { DocumentHandler } from '../../application/documentos/document-handler.js';
 import { BuscarDocumentos } from '../../application/documentos/buscar-documentos.js';
+import { ResumirDocumento } from '../../application/documentos/resumir-documento.js';
 import { DocumentSearchHandler } from '../../application/documentos/document-search-handler.js';
 import { resolveProcessoIdByCnj } from '../db/cerebro1-store.js';
 import {
@@ -62,6 +63,7 @@ import {
   gravarConteudoDocumento,
   inserirDocumento,
   removerDocumento,
+  setResumoDocumento,
 } from '../db/documentos-store.js';
 import { getEmbeddingsConfig } from '../../adapters/embeddings/config.js';
 import { createEmbeddingsAdapter } from '../../adapters/embeddings/factory.js';
@@ -199,13 +201,22 @@ function registerWhatsapp(app: FastifyInstance): void {
         minSimilarity: config.DOCUMENTOS_BUSCA_MIN_SIM,
         logger: app.log,
       });
+      // Resumo de documento guardado (12C): resumo salvo (instantâneo) ou novo
+      // relendo o Storage; posse re-verificada por tenant (getById) antes de reler.
+      const resumoDocs = new ResumirDocumento({
+        store: { getById: getDocumentoById, setResumo: setResumoDocumento },
+        storage: supabaseStorage,
+        llm,
+        logger: app.log,
+      });
       overrides.documento = new DocumentSearchHandler({
         busca: buscaDocs,
+        resumo: resumoDocs,
         storage: supabaseStorage,
         urlTtlSec: config.DOCUMENTOS_URL_TTL_SEC,
       });
       app.log.info(
-        `Busca de documentos (12B) ativa — ${embeddings ? 'exata + semântica' : 'só exata (sem embeddings)'}`,
+        `Documentos: busca (12B) ${embeddings ? 'exata + semântica' : 'só exata'} + resumo (12C) ativos`,
       );
     } else {
       app.log.warn('SUPABASE_SERVICE_ROLE_KEY ausente — documentos (12A) inativos (placeholder)');

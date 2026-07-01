@@ -172,10 +172,12 @@ export class Orchestrator {
     const cfg = this.deps.memoriaConfig;
     if (!memory || !cfg?.enabled) return;
     const em = this.now().toISOString();
-    const novos: ConversationTurn[] = [
-      { papel: 'user', intent, em },
-      { papel: 'assistant', intent, fontes: handled.fontesCitadas ?? [], em },
-    ];
+    const assistant: ConversationTurn = { papel: 'assistant', intent, fontes: handled.fontesCitadas ?? [], em };
+    // 12C: guarda os ids listados (ordem) para resolver "resume o segundo" depois.
+    if (handled.documentosListados && handled.documentosListados.length > 0) {
+      assistant.docIds = handled.documentosListados;
+    }
+    const novos: ConversationTurn[] = [{ papel: 'user', intent, em }, assistant];
     const turnos = trimTurnos([...anteriores, ...novos], cfg.turnos);
     await memory.save(assinanteId, turnos);
   }

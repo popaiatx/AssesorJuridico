@@ -14,6 +14,13 @@ export interface ConversationTurn {
   intent?: string;
   /** assistant: citações validadas (referências públicas — ex.: "art. 335 do CPC"). */
   fontes?: string[];
+  /**
+   * assistant (Passo 12C): ids (UUID) dos documentos LISTADOS na última resposta,
+   * em ordem, para resolver referências como "resume o segundo". São referências
+   * opacas do PRÓPRIO tenant (não é conteúdo/PII); a posse é re-verificada por
+   * tenant ao usar. Ausente quando a resposta não listou documentos.
+   */
+  docIds?: string[];
   /** ISO do momento do turno. */
   em: string;
 }

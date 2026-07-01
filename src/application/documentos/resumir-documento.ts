@@ -32,6 +32,11 @@ export interface PedidoResumo {
   foco?: string;
 }
 
+/** Porta usada pelo handler (facilita injeção/teste). */
+export interface ResumidorDocumento {
+  resumirPorId(assinanteId: string, docId: string, pedido?: PedidoResumo): Promise<string>;
+}
+
 export interface ResumirDocumentoDeps {
   store: DocumentoResumoStore;
   storage: StoragePort;
@@ -41,7 +46,7 @@ export interface ResumirDocumentoDeps {
   logger: Logger;
 }
 
-export class ResumirDocumento {
+export class ResumirDocumento implements ResumidorDocumento {
   constructor(private readonly deps: ResumirDocumentoDeps) {}
 
   /**
