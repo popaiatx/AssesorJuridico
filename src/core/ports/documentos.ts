@@ -16,7 +16,13 @@ export interface KeyInfo {
   resumoCurto: string;
 }
 
-export type ExtracaoStatus = 'ok' | 'sem_texto' | 'falha';
+/**
+ * Estado da extração de texto. 'ok' = texto nativo (confiável). 'ok_ocr' = texto
+ * obtido por OCR (bom, mas a conferir — sobretudo números). 'ok_ocr_parcial' = OCR
+ * que leu só as primeiras páginas (documento grande; cobertura parcial).
+ * 'sem_texto' = ponto cego (nem nativo nem OCR aproveitável). 'falha' = erro.
+ */
+export type ExtracaoStatus = 'ok' | 'ok_ocr' | 'ok_ocr_parcial' | 'sem_texto' | 'falha';
 export type DocumentoStatus = 'aguardando_decisao' | 'guardado';
 
 export interface NovoDocumento {

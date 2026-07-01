@@ -5,7 +5,19 @@
  * neste passo → o serviço avisa e marca `sem_texto` (ponto cego da busca do 12B);
  * planilhas ficam de fora por ora (aviso claro). Nunca inventar conteúdo.
  */
+import type { ExtracaoStatus } from '../../ports/documentos.js';
+
 export type DocFormato = 'txt' | 'pdf' | 'docx' | 'imagem' | 'planilha' | 'desconhecido';
+
+/** Documento tem texto aproveitável (nativo ou por OCR)? */
+export function temTexto(s: ExtracaoStatus): boolean {
+  return s === 'ok' || s === 'ok_ocr' || s === 'ok_ocr_parcial';
+}
+
+/** O texto veio de OCR (bom, mas a conferir)? */
+export function ehOcr(s: ExtracaoStatus): boolean {
+  return s === 'ok_ocr' || s === 'ok_ocr_parcial';
+}
 
 const POR_EXTENSAO: Record<string, DocFormato> = {
   txt: 'txt',
@@ -73,7 +85,35 @@ export const AVISO = {
   falhaRelerResumo:
     'Não consegui reler o conteúdo desse documento agora para resumir. Tente de novo em ' +
     'instantes.',
+  /** 13: texto obtido por OCR — o advogado precisa conferir (sobretudo números). */
+  ocrConfira:
+    '🔎 Li este documento por reconhecimento de imagem (OCR) — confira os dados, ' +
+    'sobretudo *números* (protocolo, processo, valores), que o OCR pode errar.',
+  /** 13: OCR de baixa confiança → não registra dados incertos (antialucinação). */
+  ocrBaixaConfianca:
+    'Consegui ler apenas *parcialmente* este documento (imagem de baixa qualidade). ' +
+    'Para não registrar dados errados, não vou indexá-lo por conteúdo — se puder, ' +
+    'reenvie com mais nitidez.',
 } as const;
+
+/** 13: monta o aviso de OCR parcial (leu só as primeiras páginas). */
+export function avisoOcrParcial(lidas: number, total: number): string {
+  return (
+    `🔎 Li as *primeiras ${lidas} de ${total} páginas* por OCR — o restante não entrou. ` +
+    'Para o documento completo, use o reprocessamento (doc:ocr). Confira, sobretudo números.'
+  );
+}
+
+/** 13: marca curta em listas/buscas/resumos, para não confundir OCR com texto nativo. */
+export const MARCA_OCR = '🔎 lido por OCR — confira';
+export const MARCA_OCR_PARCIAL = '🔎 OCR parcial — confira';
+
+/** Marca adequada ao status (vazio para texto nativo). */
+export function marcaOcr(s: ExtracaoStatus): string {
+  if (s === 'ok_ocr') return MARCA_OCR;
+  if (s === 'ok_ocr_parcial') return MARCA_OCR_PARCIAL;
+  return '';
+}
 
 /** Aviso de apoio acrescentado a TODO resumo exibido (12A/12C). */
 export const DISCLAIMER_RESUMO =

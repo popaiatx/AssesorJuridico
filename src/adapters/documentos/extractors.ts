@@ -8,10 +8,11 @@ import * as mammoth from 'mammoth';
 // Importa o módulo interno do pdf-parse para evitar o "modo debug" do index.js.
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import { AVISO, detectFormato, isMeaningfulText, type DocFormato } from '../../core/domain/documentos/formato.js';
+import type { ExtracaoStatus } from '../../core/ports/documentos.js';
 
 export interface ExtracaoResultado {
   texto: string;
-  status: 'ok' | 'sem_texto' | 'falha';
+  status: ExtracaoStatus;
   formato: DocFormato;
   aviso?: string;
 }

@@ -80,6 +80,18 @@ const envSchema = z.object({
   DOCUMENTOS_BUSCA_TOPN: z.coerce.number().int().positive().default(5),
   // Piso de similaridade da busca semântica de documentos (vizinho irrelevante fora).
   DOCUMENTOS_BUSCA_MIN_SIM: z.coerce.number().min(0).max(1).default(0.3),
+
+  // --- OCR local (Passo 13). Tesseract.js (WASM) — documento nunca sai do ambiente.
+  // Liga/desliga. Desligado = comportamento de antes (escaneado fica sem_texto).
+  OCR_ENABLED: z.string().default('true').transform((v) => v.toLowerCase() !== 'false'),
+  // Idioma do modelo (por = português). Precisa do vendor/tessdata/<idioma>.traineddata.gz.
+  OCR_IDIOMA: z.string().default('por'),
+  // Confiança mínima (0–100) para ACEITAR o OCR; abaixo disso não indexa (não inventa).
+  OCR_MIN_CONFIANCA: z.coerce.number().min(0).max(100).default(60),
+  // Teto de páginas no OCR SÍNCRONO (fluxo da conversa). Bulk maior via CLI doc:ocr.
+  OCR_MAX_PAGINAS: z.coerce.number().int().positive().default(3),
+  // Pasta com os modelos vendorizados (sem CDN em runtime).
+  OCR_TESSDATA_DIR: z.string().default('vendor/tessdata'),
 });
 
 export type Config = z.infer<typeof envSchema>;
