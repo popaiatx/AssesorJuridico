@@ -8,6 +8,9 @@
  *  - faltando: campos obrigatórios ainda ausentes (pergunta só o que falta);
  *  - erro: mensagem quando algo veio inválido (pede correção).
  */
+import { parseValorBRL } from './cerebro1/dinheiro.js';
+import { gerarPlano } from './cerebro1/parcelas.js';
+
 export type ActionKind = 'leitura' | 'escrita' | 'edicao' | 'ajuda';
 
 export interface ValidationResult {
@@ -30,6 +33,9 @@ export const PERGUNTAS: Record<string, string> = {
   tipo: 'É *audiência*, *reunião* ou *prazo*?',
   data_hora: 'Para quando? (data e hora, ex.: 02/07 às 14h)',
   descricao: 'Qual a descrição? (ex.: "Audiência de instrução")',
+  valor: 'Qual o valor? (total ou o valor de cada parcela, ex.: 10.000,00)',
+  vencimento: 'Qual o vencimento? (à vista) ou o *primeiro* vencimento, se parcelado — ex.: 20/07',
+  num_parcelas: 'Em quantas parcelas?',
 };
 
 const TIPOS = ['audiencia', 'reuniao', 'prazo'];
@@ -451,6 +457,241 @@ const arquivarProcessoAcao: ActionDef = {
   },
 };
 
+// --- Passo 16: financeiro/honorários (parcelas em lancamentos_financeiros;
+// alvo resolvido pelo handler; confirmação SEMPRE antes de gravar; cancelar =
+// status, nunca delete; o sistema NUNCA cobra o cliente final) ---
+
+function isoDate(raw: string): string | null {
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(raw.trim());
+  return m ? m[1]! : null;
+}
+
+const registrarHonorario: ActionDef = {
+  name: 'registrar_honorario',
+  kind: 'edicao',
+  description:
+    'Registrar honorário num processo: À VISTA (valor + vencimento) ou PARCELADO ' +
+    '(valor total OU valor de cada parcela + número de parcelas + primeiro vencimento; ' +
+    '"todo dia N" vai em dia_vencimento). Identifique o processo por número (CNJ ou trecho), cliente ou parte.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ...SEL_PROCESSO,
+      valor_total: { type: 'string', description: 'Valor TOTAL, ex.: "10.000,00" (opcional se valor_parcela vier)' },
+      valor_parcela: { type: 'string', description: 'Valor de CADA parcela, ex.: "1.000" (opcional se valor_total vier)' },
+      num_parcelas: { type: 'integer', description: 'Número de parcelas (1 = à vista; default 1)' },
+      vencimento: { type: 'string', description: 'Vencimento (à vista) ou PRIMEIRO vencimento (parcelado), ISO YYYY-MM-DD' },
+      dia_vencimento: { type: 'integer', description: 'Dia do mês das parcelas ("todo dia 20") — opcional' },
+      descricao: { type: 'string', description: 'Descrição, ex.: "honorários contratuais" (opcional)' },
+    },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro: erroSel } = parseSelectorProcesso(input);
+    const value: Record<string, unknown> = { ...sel };
+    const faltando: string[] = [];
+    let erro = erroSel;
+
+    const temSelector = value.alvoCnj || value.alvoNumero || value.alvoCliente || value.alvoParte;
+    if (!erro && !temSelector) erro = SEM_SELETOR_PROCESSO;
+
+    const desc = str(input.descricao);
+    if (desc) value.descricao = desc;
+
+    const nRaw = input.num_parcelas;
+    const n = typeof nRaw === 'number' && Number.isInteger(nRaw) ? nRaw : 1;
+
+    const vtRaw = str(input.valor_total);
+    const vpRaw = str(input.valor_parcela);
+    let totalCentavos: number | undefined;
+    let valorParcelaCentavos: number | undefined;
+    if (vpRaw) {
+      const c = parseValorBRL(vpRaw);
+      if (c === null || c < 1) erro = erro ?? `Não entendi o valor "${vpRaw}". Pode mandar como 1.000,00?`;
+      else valorParcelaCentavos = c;
+    } else if (vtRaw) {
+      const c = parseValorBRL(vtRaw);
+      if (c === null || c < 1) erro = erro ?? `Não entendi o valor "${vtRaw}". Pode mandar como 10.000,00?`;
+      else totalCentavos = c;
+    } else if (!erro) {
+      faltando.push('valor');
+    }
+
+    const vencRaw = str(input.vencimento);
+    const venc = vencRaw ? isoDate(vencRaw) : null;
+    if (vencRaw && !venc) erro = erro ?? 'Não entendi a data do vencimento. Ex.: 20/07 (dia 20 de julho).';
+    if (!vencRaw && !erro) faltando.push('vencimento');
+
+    const diaRaw = input.dia_vencimento;
+    const dia = typeof diaRaw === 'number' && Number.isInteger(diaRaw) ? diaRaw : undefined;
+
+    if (!erro && faltando.length === 0 && venc) {
+      const r = gerarPlano({
+        ...(totalCentavos !== undefined ? { totalCentavos } : {}),
+        ...(valorParcelaCentavos !== undefined ? { valorParcelaCentavos } : {}),
+        numParcelas: n,
+        primeiroVencimento: venc,
+        ...(dia !== undefined ? { diaVencimento: dia } : {}),
+      });
+      if (!r.ok) erro = r.erro;
+      else {
+        value.parcelas = r.plano.parcelas;
+        value.totalCentavos = r.plano.totalCentavos;
+      }
+    }
+    return { value, faltando, erro };
+  },
+};
+
+const SEL_PARCELA = {
+  ...SEL_PROCESSO,
+  mes: { type: 'string', description: 'Mês do VENCIMENTO da parcela alvo, YYYY-MM (opcional)' },
+  parcela_num: { type: 'integer', description: 'Número da parcela alvo, ex.: 3 ("a terceira") (opcional)' },
+};
+
+function parseSelectorParcela(input: Record<string, unknown>): {
+  sel: Record<string, unknown>;
+  erro: string | null;
+} {
+  const { sel, erro: erroSel } = parseSelectorProcesso(input);
+  let erro = erroSel;
+  const mes = str(input.mes);
+  if (mes) {
+    if (/^\d{4}-\d{2}$/.test(mes)) sel.mes = mes;
+    else erro = erro ?? 'Não entendi o mês. Pode informar como 2026-07 (julho)?';
+  }
+  const num = input.parcela_num;
+  if (typeof num === 'number' && Number.isInteger(num) && num >= 1) sel.parcelaNum = num;
+  return { sel, erro };
+}
+
+const SEM_SELETOR_PARCELA =
+  'De qual parcela? Me diga o processo (número ou cliente) e, se precisar, o mês ou o número dela.';
+
+const marcarParcelaPaga: ActionDef = {
+  name: 'marcar_parcela_paga',
+  kind: 'edicao',
+  description:
+    'Marcar uma parcela de honorário como PAGA. Identifique pelo processo (número/cliente/parte) ' +
+    'e, se precisar, pelo mês do vencimento (YYYY-MM) ou pelo número da parcela.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { ...SEL_PARCELA },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro } = parseSelectorParcela(input);
+    const tem = sel.alvoCnj || sel.alvoNumero || sel.alvoCliente || sel.alvoParte || sel.mes || sel.parcelaNum;
+    return { value: sel, faltando: [], erro: erro ?? (tem ? null : SEM_SELETOR_PARCELA) };
+  },
+};
+
+const editarParcela: ActionDef = {
+  name: 'editar_parcela',
+  kind: 'edicao',
+  description:
+    'Alterar o valor e/ou o vencimento de UMA parcela pendente. Identifique como em marcar_parcela_paga.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ...SEL_PARCELA,
+      novo_valor: { type: 'string', description: 'Novo valor, ex.: "1.200,00" (opcional)' },
+      novo_vencimento: { type: 'string', description: 'Novo vencimento ISO YYYY-MM-DD (opcional)' },
+    },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro: erroSel } = parseSelectorParcela(input);
+    const value: Record<string, unknown> = { ...sel };
+    let erro = erroSel;
+    const nv = str(input.novo_valor);
+    if (nv) {
+      const c = parseValorBRL(nv);
+      if (c === null || c < 1) erro = erro ?? `Não entendi o valor "${nv}". Pode mandar como 1.200,00?`;
+      else value.novoValorCentavos = c;
+    }
+    const nvenc = str(input.novo_vencimento);
+    if (nvenc) {
+      const d = isoDate(nvenc);
+      if (!d) erro = erro ?? 'Não entendi o novo vencimento. Ex.: 25/08.';
+      else value.novoVencimento = d;
+    }
+    const temSel = value.alvoCnj || value.alvoNumero || value.alvoCliente || value.alvoParte || value.mes || value.parcelaNum;
+    const temMudanca = value.novoValorCentavos || value.novoVencimento;
+    if (!erro && !temSel) erro = SEM_SELETOR_PARCELA;
+    else if (!erro && !temMudanca) erro = 'O que você quer mudar na parcela? (valor e/ou vencimento)';
+    return { value, faltando: [], erro };
+  },
+};
+
+const cancelarParcelaAcao: ActionDef = {
+  name: 'cancelar_parcela',
+  kind: 'edicao',
+  description:
+    'Cancelar UMA parcela pendente (vira status cancelado; nada é apagado). ' +
+    'AÇÃO DESTRUTIVA: o handler confirma mostrando a parcela real.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { ...SEL_PARCELA },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro } = parseSelectorParcela(input);
+    const tem = sel.alvoCnj || sel.alvoNumero || sel.alvoCliente || sel.alvoParte || sel.mes || sel.parcelaNum;
+    return { value: sel, faltando: [], erro: erro ?? (tem ? null : SEM_SELETOR_PARCELA) };
+  },
+};
+
+const cancelarAcordo: ActionDef = {
+  name: 'cancelar_acordo',
+  kind: 'edicao',
+  description:
+    'Cancelar um ACORDO de honorários inteiro: cancela SÓ as parcelas pendentes; as pagas ficam ' +
+    'no histórico. Identifique o processo. AÇÃO DESTRUTIVA com confirmação reforçada.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { ...SEL_PROCESSO },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro } = parseSelectorProcesso(input);
+    const tem = sel.alvoCnj || sel.alvoNumero || sel.alvoCliente || sel.alvoParte;
+    return { value: sel, faltando: [], erro: erro ?? (tem ? null : SEM_SELETOR_PROCESSO) };
+  },
+};
+
+const consultarFinanceiro: ActionDef = {
+  name: 'consultar_financeiro',
+  kind: 'leitura',
+  description:
+    'Consultar o que há A RECEBER (parcelas pendentes/atrasadas): geral, por processo/cliente ' +
+    'ou por mês ("o que tenho a receber este mês?", "quanto o Gabriel me deve?").',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      ...SEL_PROCESSO,
+      mes: { type: 'string', description: 'Mês do vencimento, YYYY-MM (opcional)' },
+    },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro: erroSel } = parseSelectorProcesso(input);
+    let erro = erroSel;
+    const mes = str(input.mes);
+    if (mes) {
+      if (/^\d{4}-\d{2}$/.test(mes)) sel.mes = mes;
+      else erro = erro ?? 'Não entendi o mês. Pode informar como 2026-07 (julho)?';
+    }
+    return { value: sel, faltando: [], erro };
+  },
+};
+
 // --- Passo 15: ficha do processo (LEITURA agregada; o handler resolve o alvo
 // e desambigua como nas edições, mas sem confirmação — leitura não grava) ---
 
@@ -495,6 +736,12 @@ export const ACTIONS: ActionDef[] = [
   editarProcesso,
   arquivarProcessoAcao,
   consultarFicha,
+  registrarHonorario,
+  marcarParcelaPaga,
+  editarParcela,
+  cancelarParcelaAcao,
+  cancelarAcordo,
+  consultarFinanceiro,
   ajudaAssessor,
 ];
 

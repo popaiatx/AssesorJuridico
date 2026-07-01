@@ -30,8 +30,23 @@ import type {
   ProcessoPatch,
   ProcessoRow,
 } from '../../core/ports/cerebro1.js';
+import { randomUUID } from 'node:crypto';
 import type { LlmPort } from '../../core/ports/llm.js';
 import { formatarFicha } from '../../core/domain/cerebro1/ficha-format.js';
+import {
+  centavosParaDecimal,
+  decimalParaCentavos,
+  formatarCentavos,
+} from '../../core/domain/cerebro1/dinheiro.js';
+import { hojeBRT, type ParcelaPlano } from '../../core/domain/cerebro1/parcelas.js';
+import {
+  descreverPlano,
+  formatarConsultaFinanceiro,
+  formatarDataBR,
+  labelParcela,
+  valorParcela,
+} from '../../core/domain/cerebro1/financeiro-format.js';
+import type { FinanceiroStore } from '../../core/ports/financeiro.js';
 import type { FichaProcessoService } from './ficha-processo.js';
 import { selectAction } from './select-action.js';
 import { formatCompromissos, respondProcessos } from './read-responder.js';
@@ -48,16 +63,20 @@ export interface Cerebro1HandlerDeps {
   logger: Logger;
   /** Ficha do processo (Passo 15). Sem ela, `consultar_ficha` avisa com honestidade. */
   ficha?: FichaProcessoService;
+  /** Financeiro/honorários (Passo 16). Sem ele, as ações avisam com honestidade. */
+  financeiro?: FinanceiroStore;
 }
 
 const FALHA_GENERICA =
   'Tive um problema para processar isso agora. Pode tentar de novo em instantes? 🙏';
 
 const AJUDA_TEXT =
-  'Eu organizo a rotina do seu escritório: posso *cadastrar e consultar processos* e ' +
-  '*agendar compromissos e prazos* (audiências, reuniões). É só dizer, ex.: "cadastrar ' +
-  'processo do cliente João" ou "agendar audiência amanhã 14h". Dúvidas jurídicas com ' +
-  'lei/jurisprudência virão com a fonte citada, em breve.';
+  'Eu organizo a rotina do seu escritório: posso *cadastrar e consultar processos* (com a ' +
+  'ficha completa), *agendar compromissos e prazos* e *controlar honorários e parcelas* ' +
+  '(com lembrete de cobrança para você). É só dizer, ex.: "cadastrar processo do cliente ' +
+  'João", "agendar audiência amanhã 14h" ou "registra honorário de 10x R$ 1.000 todo dia 20".';
+
+const SEM_FINANCEIRO = 'O financeiro não está disponível neste ambiente ainda.';
 
 function perguntasPara(faltando: string[]): string {
   return faltando.map((f) => PERGUNTAS[f] ?? `Pode me informar: ${f}?`).join(' ');
@@ -68,8 +87,15 @@ const EDICAO_ACOES = new Set([
   'cancelar_compromisso',
   'editar_processo',
   'arquivar_processo',
+  'registrar_honorario',
+  'marcar_parcela_paga',
+  'editar_parcela',
+  'cancelar_parcela',
+  'cancelar_acordo',
 ]);
 const COMPROMISSO_ACOES = new Set(['editar_compromisso', 'cancelar_compromisso']);
+const PARCELA_ACOES = new Set(['marcar_parcela_paga', 'editar_parcela', 'cancelar_parcela']);
+const FINANCEIRO_ACOES = new Set([...PARCELA_ACOES, 'registrar_honorario', 'cancelar_acordo']);
 
 function rotuloProcesso(p: ProcessoRow): string {
   if (p.numeroCnj) return `nº ${p.numeroCnj}`;
@@ -280,6 +306,30 @@ export class Cerebro1Handler implements IntentHandler {
       });
       return respondProcessos(this.deps.llm, rows);
     }
+    if (acao === 'consultar_financeiro') {
+      // Leitura DETERMINÍSTICA (sem LLM): pendentes escopadas + "atrasada" derivada.
+      if (!this.deps.financeiro) return SEM_FINANCEIRO;
+      const mes = typeof v.mes === 'string' ? v.mes : null;
+      const temProc = v.alvoCnj || v.alvoNumero || v.alvoCliente || v.alvoParte;
+      // Último dia REAL do mês ("-31" em fevereiro quebraria o ::date).
+      const fimDoMes = mes
+        ? `${mes}-${String(new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0)).getUTCDate()).padStart(2, '0')}`
+        : null;
+      const rows = await this.deps.financeiro.listarPendentes(assinanteId, {
+        processo: temProc
+          ? {
+              numeroCnj: (v.alvoCnj as string) ?? null,
+              numeroFragmento: (v.alvoNumero as string) ?? null,
+              clienteNome: (v.alvoCliente as string) ?? null,
+              parte: (v.alvoParte as string) ?? null,
+            }
+          : null,
+        de: mes ? `${mes}-01` : null,
+        ate: fimDoMes,
+      });
+      const escopo = mes ? `em ${mes.slice(5, 7)}/${mes.slice(0, 4)}` : temProc ? 'nesse processo' : null;
+      return formatarConsultaFinanceiro(rows, hojeBRT(this.deps.clock()), escopo);
+    }
     return AJUDA_TEXT;
   }
 
@@ -298,29 +348,74 @@ export class Cerebro1Handler implements IntentHandler {
       }
     }
 
-    try {
-      const candidatos = COMPROMISSO_ACOES.has(def.name)
-        ? (await this.deps.store.findCompromissos(assinanteId, {
-            numeroCnj: (value.alvoProcesso as string) ?? null,
-            tipo: (value.alvoTipo as 'audiencia' | 'reuniao' | 'prazo') ?? null,
-            dia: (value.alvoDia as string) ?? null,
-          })).map((c) => ({ id: c.id, label: labelCompromisso(c) }))
-        : (await this.deps.store.findProcessos(assinanteId, {
-            numeroCnj: (value.alvoCnj as string) ?? null,
-            numeroFragmento: (value.alvoNumero as string) ?? null,
-            clienteNome: (value.alvoCliente as string) ?? null,
-            parte: (value.alvoParte as string) ?? null,
-          })).map((p) => ({ id: p.id, label: rotuloProcesso(p) + (p.status ? ` — ${p.status}` : '') }));
+    if (FINANCEIRO_ACOES.has(def.name) && !this.deps.financeiro) {
+      await this.deps.pending.clear(assinanteId);
+      return { replyText: SEM_FINANCEIRO };
+    }
 
-      const alvo = COMPROMISSO_ACOES.has(def.name) ? 'compromisso' : 'processo';
+    // 1º vencimento no passado → pede a data certa ANTES de confirmar.
+    if (def.name === 'registrar_honorario' && Array.isArray(value.parcelas)) {
+      const primeira = (value.parcelas as ParcelaPlano[])[0];
+      if (primeira && primeira.vencimento < hojeBRT(this.deps.clock())) {
+        const { parcelas, totalCentavos, ...resto } = value;
+        void parcelas;
+        void totalCentavos;
+        await this.deps.pending.save(assinanteId, { acao: def.name, params: resto, fase: 'coletando', faltando: ['vencimento'] });
+        return {
+          replyText: `A primeira parcela ficaria no passado (${formatarDataBR(primeira.vencimento)}). Qual é a data certa do primeiro vencimento?`,
+        };
+      }
+    }
+
+    try {
+      const procSelector = {
+        numeroCnj: (value.alvoCnj as string) ?? null,
+        numeroFragmento: (value.alvoNumero as string) ?? null,
+        clienteNome: (value.alvoCliente as string) ?? null,
+        parte: (value.alvoParte as string) ?? null,
+      };
+      let candidatos: Array<{ id: string; label: string }>;
+      let alvo: 'compromisso' | 'processo' | 'parcela' | 'acordo';
+      if (COMPROMISSO_ACOES.has(def.name)) {
+        alvo = 'compromisso';
+        candidatos = (await this.deps.store.findCompromissos(assinanteId, {
+          numeroCnj: (value.alvoProcesso as string) ?? null,
+          tipo: (value.alvoTipo as 'audiencia' | 'reuniao' | 'prazo') ?? null,
+          dia: (value.alvoDia as string) ?? null,
+        })).map((c) => ({ id: c.id, label: labelCompromisso(c) }));
+      } else if (PARCELA_ACOES.has(def.name)) {
+        alvo = 'parcela';
+        const hoje = hojeBRT(this.deps.clock());
+        candidatos = (await this.deps.financeiro!.findParcelas(assinanteId, {
+          ...procSelector,
+          mesAno: (value.mes as string) ?? null,
+          parcelaNum: (value.parcelaNum as number) ?? null,
+        })).map((p) => ({ id: p.id, label: labelParcela(p, hoje) }));
+      } else if (def.name === 'cancelar_acordo') {
+        alvo = 'acordo';
+        candidatos = (await this.deps.financeiro!.findAcordos(assinanteId, procSelector)).map((a) => ({
+          id: a.acordoId,
+          label:
+            `${a.totalParcelas ?? '?'}x${a.descricao ? ` (${a.descricao})` : ''} — ` +
+            `${a.pendentes} pendente(s) — proc ${a.processoNumero ?? '?'}${a.clienteNome ? `, ${a.clienteNome}` : ''}`,
+        }));
+      } else {
+        alvo = 'processo';
+        candidatos = (await this.deps.store.findProcessos(assinanteId, procSelector)).map((p) => ({
+          id: p.id,
+          label: rotuloProcesso(p) + (p.status ? ` — ${p.status}` : ''),
+        }));
+      }
+
       if (candidatos.length === 0) {
         await this.deps.pending.clear(assinanteId);
-        return {
-          replyText:
-            alvo === 'compromisso'
-              ? 'Não encontrei esse compromisso. Pode me dizer o processo, o tipo ou o dia?'
-              : 'Não encontrei esse processo. Pode me dizer o número (CNJ), o cliente ou a parte?',
+        const msg: Record<typeof alvo, string> = {
+          compromisso: 'Não encontrei esse compromisso. Pode me dizer o processo, o tipo ou o dia?',
+          processo: 'Não encontrei esse processo. Pode me dizer o número (CNJ), o cliente ou a parte?',
+          parcela: 'Não encontrei parcela pendente com essa referência. Pode me dizer o processo (ou cliente) e o mês?',
+          acordo: 'Não encontrei acordo de honorários com parcelas pendentes nesse processo.',
         };
+        return { replyText: msg[alvo] };
       }
       if (candidatos.length === 1) return this.confirmarEdicao(assinanteId, def, value, candidatos[0]!.id);
 
@@ -435,7 +530,57 @@ export class Cerebro1Handler implements IntentHandler {
     // Re-verifica o alvo por TENANT (id só vale se for do próprio assinante) e
     // monta a confirmação com o registro REAL.
     let texto: string;
-    if (COMPROMISSO_ACOES.has(def.name)) {
+    if (PARCELA_ACOES.has(def.name)) {
+      const p = await this.deps.financeiro!.getParcelaById(assinanteId, id);
+      if (!p || p.status !== 'pendente') {
+        await this.deps.pending.clear(assinanteId);
+        return { replyText: 'Não encontrei mais essa parcela pendente (pode ter sido alterada).' };
+      }
+      const hoje = hojeBRT(this.deps.clock());
+      if (def.name === 'marcar_parcela_paga') {
+        texto = `Confirmo: parcela ${labelParcela(p, hoje)} → marcar como *PAGA*? Responda *SIM*.`;
+      } else if (def.name === 'cancelar_parcela') {
+        texto =
+          `⚠️ Vou *CANCELAR* a parcela ${labelParcela(p, hoje)}. Ela sai das pendências ` +
+          '(o registro fica no histórico como cancelado). Responda *SIM* para cancelar.';
+      } else {
+        const partes: string[] = [];
+        if (typeof value.novoValorCentavos === 'number')
+          partes.push(`valor: ${valorParcela(p)} → ${formatarCentavos(value.novoValorCentavos)}`);
+        if (typeof value.novoVencimento === 'string')
+          partes.push(
+            `vencimento: ${p.vencimento ? formatarDataBR(p.vencimento) : '?'} → ${formatarDataBR(value.novoVencimento)}`,
+          );
+        texto = `Vou alterar a parcela ${labelParcela(p, hoje)} — ${partes.join('; ')}. Responda *SIM* para confirmar.`;
+      }
+    } else if (def.name === 'cancelar_acordo') {
+      const a = await this.deps.financeiro!.getAcordoById(assinanteId, id);
+      if (!a || a.pendentes === 0) {
+        await this.deps.pending.clear(assinanteId);
+        return { replyText: 'Não encontrei mais parcelas pendentes nesse acordo.' };
+      }
+      const somaCent = decimalParaCentavos(a.somaPendenteDecimal);
+      const soma = somaCent === null ? `R$ ${a.somaPendenteDecimal}` : formatarCentavos(somaCent);
+      texto =
+        `⚠️ Vou *CANCELAR ${a.pendentes} parcela(s) PENDENTE(S)* (${soma}) do acordo` +
+        `${a.descricao ? ` "${a.descricao}"` : ''} do processo ${a.processoNumero ?? '?'}` +
+        `${a.clienteNome ? `, cliente ${a.clienteNome}` : ''}. ` +
+        `${a.pagas > 0 ? `As ${a.pagas} paga(s) ficam no histórico. ` : ''}Isso não pode ser desfeito em lote. ` +
+        'Responda *SIM* para cancelar.';
+    } else if (def.name === 'registrar_honorario') {
+      const p = await this.deps.store.getProcessoById(assinanteId, id);
+      if (!p) {
+        await this.deps.pending.clear(assinanteId);
+        return { replyText: 'Não encontrei mais esse processo (pode ter sido alterado).' };
+      }
+      const parcelas = value.parcelas as ParcelaPlano[];
+      texto =
+        `Registrar honorário${typeof value.descricao === 'string' ? ` (${value.descricao})` : ''} no processo ` +
+        `${rotuloProcesso(p)}${p.clienteNome ? `, cliente ${p.clienteNome}` : ''}: ` +
+        `*${descreverPlano(parcelas, value.totalCentavos as number)}*. ` +
+        'Vou te lembrar de cada vencimento (o aviso é só para você — eu nunca cobro o seu cliente). ' +
+        'Responda *SIM* para registrar.';
+    } else if (COMPROMISSO_ACOES.has(def.name)) {
       const c = await this.deps.store.getCompromissoById(assinanteId, id);
       if (!c) {
         await this.deps.pending.clear(assinanteId);
@@ -535,6 +680,58 @@ export class Cerebro1Handler implements IntentHandler {
       return ok
         ? '✅ Processo arquivado (sai da rotina; o histórico fica).'
         : 'Não encontrei mais esse processo.';
+    }
+
+    // --- Passo 16: financeiro (loja garantida pelo gate em resolverEConfirmar) ---
+    const fin = this.deps.financeiro;
+    if (!fin) return SEM_FINANCEIRO;
+
+    if (pend.acao === 'registrar_honorario') {
+      const parcelas = v.parcelas as ParcelaPlano[];
+      const gravadas = await fin.criarHonorario(assinanteId, {
+        processoId: id, // re-verificado por tenant DENTRO da transação de criação
+        acordoId: randomUUID(),
+        descricao: typeof v.descricao === 'string' ? v.descricao : null,
+        parcelas: parcelas.map((p) => ({
+          valorDecimal: p.valorDecimal,
+          vencimento: p.vencimento,
+          parcela: p.parcela,
+          totalParcelas: p.totalParcelas,
+        })),
+      });
+      return (
+        `✅ Honorário registrado: ${descreverPlano(parcelas, v.totalCentavos as number)} ` +
+        `(${gravadas} parcela(s)). Vou te lembrar de cada vencimento. 💰`
+      );
+    }
+
+    if (pend.acao === 'marcar_parcela_paga') {
+      const ok = await fin.marcarParcelaPaga(assinanteId, id, this.deps.clock().toISOString());
+      return ok ? '✅ Parcela marcada como *paga*!' : 'Não encontrei mais essa parcela pendente.';
+    }
+
+    if (pend.acao === 'editar_parcela') {
+      const patch: { valorDecimal?: string; vencimento?: string } = {};
+      if (typeof v.novoValorCentavos === 'number') {
+        patch.valorDecimal = centavosParaDecimal(v.novoValorCentavos);
+      }
+      if (typeof v.novoVencimento === 'string') patch.vencimento = v.novoVencimento;
+      const ok = await fin.updateParcela(assinanteId, id, patch);
+      return ok ? '✅ Parcela atualizada!' : 'Não encontrei mais essa parcela pendente.';
+    }
+
+    if (pend.acao === 'cancelar_parcela') {
+      const ok = await fin.cancelarParcela(assinanteId, id);
+      return ok
+        ? '✅ Parcela cancelada (sai das pendências; o registro fica no histórico).'
+        : 'Não encontrei mais essa parcela pendente.';
+    }
+
+    if (pend.acao === 'cancelar_acordo') {
+      const r = await fin.cancelarAcordoPendentes(assinanteId, id);
+      return r.canceladas > 0
+        ? `✅ ${r.canceladas} parcela(s) pendente(s) cancelada(s). As pagas ficam no histórico.`
+        : 'Não encontrei mais parcelas pendentes nesse acordo.';
     }
 
     return FALHA_GENERICA;

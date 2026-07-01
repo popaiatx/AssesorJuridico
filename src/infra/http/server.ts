@@ -43,6 +43,7 @@ import {
 } from '../../adapters/cerebro1/supabase-cerebro1-store.js';
 import { FichaProcessoService } from '../../application/cerebro1/ficha-processo.js';
 import { supabaseFichaStore } from '../../adapters/cerebro1/supabase-ficha-store.js';
+import { supabaseFinanceiroStore } from '../../adapters/cerebro1/supabase-financeiro-store.js';
 import { Cerebro2Handler } from '../../application/cerebro2/cerebro2-handler.js';
 import { supabaseCorpusStore } from '../../adapters/corpus/supabase-corpus-store.js';
 import { conversationMemoryStore } from '../db/conversation-memory-store.js';
@@ -134,6 +135,8 @@ function registerWhatsapp(app: FastifyInstance): void {
       logger: app.log,
       // Ficha do processo (Passo 15): agregação escopada por tenant, sem LLM.
       ficha: new FichaProcessoService({ store: supabaseFichaStore, clock: () => new Date() }),
+      // Financeiro/honorários (Passo 16): parcelas escopadas por tenant.
+      financeiro: supabaseFinanceiroStore,
     });
     overrides.consulta_dados = cerebro1;
     overrides.agendar = cerebro1;
