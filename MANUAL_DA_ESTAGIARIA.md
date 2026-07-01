@@ -1,4 +1,4 @@
-# Manual do Assessor Jurídico
+# Manual da estagiárIA
 
 > Guia em linguagem simples — para o dono do produto planejar e, depois, para os
 > advogados aprenderem a usar. O estado técnico detalhado fica no
@@ -6,19 +6,20 @@
 
 ---
 
-## Parte 1 — O que é o Assessor Jurídico
+## Parte 1 — O que é a estagiárIA
 
-É um assistente que funciona **pelo WhatsApp**, como se fosse um secretário jurídico
-que entende a língua do dia a dia. Serve para **advogados** (organizar processos,
+A estagiárIA é uma assistente que funciona **pelo WhatsApp**, como se fosse uma
+estagiária jurídica que entende a língua do dia a dia — daí o nome, com "IA" de
+Inteligência Artificial. Serve para **advogados** (organizar processos,
 prazos e compromissos do escritório), e também para **estudantes e curiosos do meio
 jurídico** (tirar dúvidas sobre a lei). O princípio que rege tudo: quando responde
-sobre direito, ele **só afirma o que está em lei real e mostra a fonte (lei + artigo)**
-— **nunca inventa**; se não tem base, ele diz que não tem. E tudo o que ele produz é
+sobre direito, ela **só afirma o que está em lei real e mostra a fonte (lei + artigo)**
+— **nunca inventa**; se não tem base, ela diz que não tem. E tudo o que ela produz é
 **apoio ao advogado, sempre sob a revisão e a responsabilidade dele**.
 
 ---
 
-## Parte 2 — O que ele JÁ FAZ hoje
+## Parte 2 — O que ela JÁ FAZ hoje
 
 ### 1. Consultar leis (com fonte de verdade)
 **O que faz:** responde perguntas sobre a lei citando o artigo real, a partir de um
@@ -28,88 +29,88 @@ da Previdência (8.213/91)**.
 
 **Exemplos (do jeito que se fala no WhatsApp):**
 - Você: *"Qual o prazo para contestação no processo civil?"*
-  Ele: *"📚 Com base no acervo: o réu tem 15 dias para contestar (art. 335 do CPC) — com o link oficial. (informação de apoio, confira na fonte.)"*
+  Ela: *"📚 Com base no acervo: o réu tem 15 dias para contestar (art. 335 do CPC) — com o link oficial. (informação de apoio, confira na fonte.)"*
 - Você: *"O consumidor pode desistir de uma compra feita pela internet?"*
-  Ele: cita o **art. 49 do CDC** (direito de arrependimento, 7 dias), com a fonte.
+  Ela: cita o **art. 49 do CDC** (direito de arrependimento, 7 dias), com a fonte.
 - Você: *"Quantos dias de férias o trabalhador tem?"*
-  Ele: cita o **art. 130 da CLT**.
+  Ela: cita o **art. 130 da CLT**.
 
-**Quando ele NÃO tem a resposta (e por que isso é uma qualidade):**
+**Quando ela NÃO tem a resposta (e por que isso é uma qualidade):**
 - Você: *"O que diz a Súmula 999 do STF sobre home office?"* (não existe)
-  Ele: *"Não encontrei base no acervo para afirmar isso — então não vou afirmar nada sem fonte"*, e oferece o que existe de próximo. **Ele prefere dizer "não sei" a inventar** — é isso que protege o advogado.
+  Ela: *"Não encontrei base no acervo para afirmar isso — então não vou afirmar nada sem fonte"*, e oferece o que existe de próximo. **Ela prefere dizer "não sei" a inventar** — é isso que protege o advogado.
 
 ### 2. Conversa com memória (entende o fio do assunto)
 **O que faz:** lembra do que vocês acabaram de falar, então você pode continuar sem
-repetir tudo — e ele percebe quando você muda de assunto.
+repetir tudo — e ela percebe quando você muda de assunto.
 
 **Exemplo de continuidade:**
-- Você: *"Qual o prazo de contestação no CPC?"* → ele responde citando o artigo.
-- Você (em seguida): *"E o artigo seguinte, o que diz?"* → ele entende que "seguinte"
+- Você: *"Qual o prazo de contestação no CPC?"* → ela responde citando o artigo.
+- Você (em seguida): *"E o artigo seguinte, o que diz?"* → ela entende que "seguinte"
   é em relação ao que acabou de citar.
 
 Você **não precisa fazer nada especial** — é só conversar naturalmente. Importante: a
-memória serve para ele **entender** a pergunta; a resposta jurídica continua saindo
-**sempre da lei com citação** (se não houver base, ele recusa, como sempre).
+memória serve para ela **entender** a pergunta; a resposta jurídica continua saindo
+**sempre da lei com citação** (se não houver base, ela recusa, como sempre).
 
 ### 3. Organizar o escritório (processos e compromissos)
-**O que faz:** você fala em linguagem natural e ele cadastra/consulta seus processos
+**O que faz:** você fala em linguagem natural e ela cadastra/consulta seus processos
 e compromissos — **sempre pedindo confirmação antes de gravar**.
 
 **Exemplos:**
 - Você: *"Registra a audiência do processo 12345 do cliente Gabriel Machado para 15/07 às 14h."*
-  Ele: monta o compromisso e **pergunta**: *"Confirmo: audiência do processo 12345, cliente Gabriel Machado, 15/07 às 14:00?"* — só grava quando você responde **"sim"**.
+  Ela: monta o compromisso e **pergunta**: *"Confirmo: audiência do processo 12345, cliente Gabriel Machado, 15/07 às 14:00?"* — só grava quando você responde **"sim"**.
 - Você: *"Cadastra o processo 0001234-55.2024.8.26.0100 do cliente Maria Silva."* → confirma e grava.
-- Você: *"Quais são meus processos?"* / *"Quais meus compromissos da semana?"* → ele lista **somente os seus** (os dados de cada advogado são isolados; ninguém vê os do outro).
+- Você: *"Quais são meus processos?"* / *"Quais meus compromissos da semana?"* → ela lista **somente os seus** (os dados de cada advogado são isolados; ninguém vê os do outro).
 
 **Editar e cancelar (novo):** você também corrige e remove pela conversa, sempre com confirmação:
-- Você: *"Remarca a audiência do processo 12345 para sexta às 16h."* → ele mostra *"Vou alterar a audiência de 15/07 14:00 → 18/07 16:00. Responda SIM"* e, ao confirmar, **reprograma os lembretes** para a nova data automaticamente.
-- Você: *"Cancela a reunião de amanhã."* → ele mostra **exatamente** o que vai apagar (*"⚠️ Vou REMOVER a reunião de … — definitivo"*) e só remove após o **"sim"**. Se houver **mais de uma** reunião amanhã, ele **pergunta qual** (lista numerada) — nunca apaga "no chute".
+- Você: *"Remarca a audiência do processo 12345 para sexta às 16h."* → ela mostra *"Vou alterar a audiência de 15/07 14:00 → 18/07 16:00. Responda SIM"* e, ao confirmar, **reprograma os lembretes** para a nova data automaticamente.
+- Você: *"Cancela a reunião de amanhã."* → ela mostra **exatamente** o que vai apagar (*"⚠️ Vou REMOVER a reunião de … — definitivo"*) e só remove após o **"sim"**. Se houver **mais de uma** reunião amanhã, ela **pergunta qual** (lista numerada) — nunca apaga "no chute".
 - Você: *"Muda o status do processo 12345 para suspenso."* / *"Arquiva o processo do cliente João."* → confirma e aplica. Processos são **arquivados** (somem da rotina, mas o histórico fica), nunca apagados de vez.
 
 ### 4. Lembretes automáticos
-**O que faz:** ao registrar um compromisso, ele **já programa lembretes** — **24 horas
+**O que faz:** ao registrar um compromisso, ela **já programa lembretes** — **24 horas
 antes** e **1 hora antes** — que serão enviados sozinhos no seu WhatsApp, no horário de
 Brasília. Ex.: *"🔔 Lembrete: audiência do processo 12345 (cliente Gabriel Machado)
-amanhã às 14:00 — aviso automático do seu assessor."* Você não precisa pedir; é
+amanhã às 14:00 — aviso automático da sua estagiárIA."* Você não precisa pedir; é
 automático ao agendar.
 
 ### 5. Receber e organizar documentos
-**O que faz:** você manda um arquivo (PDF, Word, texto) e ele **resume, guarda, ou os
+**O que faz:** você manda um arquivo (PDF, Word, texto) e ela **resume, guarda, ou os
 dois** — e, ao guardar, sempre anota as **informações-chave** (tipo, partes, números,
 datas, assunto) para você **encontrar o documento depois**.
 
 **Exemplos:**
-- Você manda um PDF com a legenda *"resume isso"* → ele responde com o resumo.
-- Você manda um arquivo **sem dizer nada** → ele pergunta: *"O que você quer fazer? 1 - Resumir / 2 - Salvar / 3 - Resumir e salvar"* e age conforme a sua resposta.
-- Você manda um contrato com *"guarda no processo 0001234-…"* → ele guarda vinculado ao processo.
-- Se for **foto ou PDF escaneado**, ele agora **lê o texto por reconhecimento de imagem (OCR)** — tudo **dentro do nosso ambiente** (o documento não é enviado a terceiros). Assim ele consegue resumir e indexar até um documento escaneado. Como OCR pode errar (sobretudo números), ele **avisa** que aquele conteúdo veio de OCR e pede conferência. Se a imagem estiver ruim demais para ler com segurança, ele é honesto: guarda o arquivo, avisa que só leu parcialmente e **não registra dados incertos** (melhor vazio que errado).
+- Você manda um PDF com a legenda *"resume isso"* → ela responde com o resumo.
+- Você manda um arquivo **sem dizer nada** → ela pergunta: *"O que você quer fazer? 1 - Resumir / 2 - Salvar / 3 - Resumir e salvar"* e age conforme a sua resposta.
+- Você manda um contrato com *"guarda no processo 0001234-…"* → ela guarda vinculado ao processo.
+- Se for **foto ou PDF escaneado**, ela agora **lê o texto por reconhecimento de imagem (OCR)** — tudo **dentro do nosso ambiente** (o documento não é enviado a terceiros). Assim ela consegue resumir e indexar até um documento escaneado. Como OCR pode errar (sobretudo números), ela **avisa** que aquele conteúdo veio de OCR e pede conferência. Se a imagem estiver ruim demais para ler com segurança, ela é honesta: guarda o arquivo, avisa que só leu parcialmente e **não registra dados incertos** (melhor vazio que errado).
 
 **Bom saber:**
-- **Tipos que ele lê:** PDF com texto, Word (.docx) e texto (.txt); e também **fotos e
-  PDFs escaneados** (por OCR). Formatos fora disso ele guarda, mas avisa que não
+- **Tipos que ela lê:** PDF com texto, Word (.docx) e texto (.txt); e também **fotos e
+  PDFs escaneados** (por OCR). Formatos fora disso ela guarda, mas avisa que não
   conseguiu ler o conteúdo.
-- **Tamanho:** há um limite por arquivo (ajustável). Acima dele, ele avisa com
+- **Tamanho:** há um limite por arquivo (ajustável). Acima dele, ela avisa com
   clareza e pede uma versão menor — em vez de falhar sem explicar.
 
 ### 6. Encontrar um documento guardado (busca)
 **O que faz:** você pede um documento **sem lembrar o nome do arquivo** — por um detalhe
 **exato** (um número de protocolo/processo, o nome de uma pessoa, um trecho) **ou** por
-algo **vago** (o assunto, *"aquele contrato de aluguel"*). Ele procura no **seu** acervo
+algo **vago** (o assunto, *"aquele contrato de aluguel"*). Ela procura no **seu** acervo
 de duas formas ao mesmo tempo — pelo **texto/número** e pelo **significado** — e devolve
 os documentos mais prováveis com um **link para abrir**.
 
 **Exemplos:**
-- *"acha o contrato de aluguel do João"* → ele lista o(s) contrato(s) que batem, com link.
+- *"acha o contrato de aluguel do João"* → ela lista o(s) contrato(s) que batem, com link.
 - *"me manda o documento do protocolo 5551"* → acha pelo pedaço do número.
 - *"aquela procuração que guardei mês passado"* → acha pelo assunto, mesmo sem o nome.
 
 **Importante:**
-- A busca é **só sua**: ele nunca mostra documento de outra pessoa — cada conta enxerga
+- A busca é **só sua**: ela nunca mostra documento de outra pessoa — cada conta enxerga
   apenas os próprios arquivos.
-- Fotos e PDFs escaneados **também entram na busca** — ele lê o texto por OCR ao guardar.
-  Fica de fora só o que o OCR **não conseguiu ler** (imagem ruim); nesse caso ele avisa
+- Fotos e PDFs escaneados **também entram na busca** — ela lê o texto por OCR ao guardar.
+  Fica de fora só o que o OCR **não conseguiu ler** (imagem ruim); nesse caso ela avisa
   quantos você tem assim e se oferece para procurar por nome ou data.
-- Ele **acha e entrega** o documento; para o **resumo** de um deles, é só pedir (abaixo).
+- Ela **acha e entrega** o documento; para o **resumo** de um deles, é só pedir (abaixo).
 
 ### 7. Resumir um documento guardado
 **O que faz:** você pede o **resumo de um documento que já está no seu acervo**, sem
@@ -120,29 +121,29 @@ com um foco específico.
 **Exemplos:**
 - *"me resume o contrato do João"* → devolve o resumo (na hora, se já existir).
 - Depois de uma busca que listou vários: *"resume o segundo"* → resume o certo da lista.
-- *"resume focando nos prazos"* ou *"faz um resumo mais detalhado"* → ele **relê** o
+- *"resume focando nos prazos"* ou *"faz um resumo mais detalhado"* → ela **relê** o
   documento e monta um resumo novo com esse foco.
 
 **Importante:**
-- Por padrão ele entrega o **resumo que já tem guardado** — rápido e sem custo. Se o
-  documento foi só salvo (sem resumo ainda), ele lê e monta o resumo na hora — e guarda
+- Por padrão ela entrega o **resumo que já tem guardado** — rápido e sem custo. Se o
+  documento foi só salvo (sem resumo ainda), ela lê e monta o resumo na hora — e guarda
   para as próximas vezes.
 - Documento **escaneado/foto** lido por OCR pode ser resumido normalmente (com o aviso de
-  que a base veio de OCR). Só quando o OCR **não conseguiu ler** (imagem ruim) é que ele
+  que a base veio de OCR). Só quando o OCR **não conseguiu ler** (imagem ruim) é que ela
   avisa que não dá para resumir o conteúdo.
-- Se a referência combinar com **vários**, ele pergunta qual; se não achar nenhum, ele diz
+- Se a referência combinar com **vários**, ela pergunta qual; se não achar nenhum, ela diz
   com clareza. Todo resumo vem com o aviso de que é **apoio** — confira no documento.
-- É **só seu**: ele nunca resume (nem lê) documento de outra pessoa.
+- É **só seu**: ela nunca resume (nem lê) documento de outra pessoa.
 
 ### 8. Cadastro e acesso
-**O que faz:** quem é novo simplesmente **manda a primeira mensagem** no WhatsApp. O
-assessor dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pessoa ganha
+**O que faz:** quem é novo simplesmente **manda a primeira mensagem** no WhatsApp. A
+estagiárIA dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pessoa ganha
 **3 dias de teste grátis**. Depois do teste, para continuar usando é preciso
-**assinar** — enquanto não assina, o assessor avisa e direciona para o pagamento.
+**assinar** — enquanto não assina, ela avisa e direciona para o pagamento.
 
 ---
 
-## Parte 3 — O que ele ainda NÃO faz (e o que vem por aí)
+## Parte 3 — O que ela ainda NÃO faz (e o que vem por aí)
 
 - **Entender áudios** (mensagem de voz) — *(planejado, deixado para o final)*
 - **Jurisprudência** (decisões de tribunais, súmulas) no acervo de consulta — hoje só
@@ -159,7 +160,7 @@ modelo de mensagem junto à Meta).
 
 ---
 
-## Parte 4 — Visão: o caminho para um secretário jurídico completo
+## Parte 4 — Visão: o caminho para uma assistente jurídica completa
 
 > Mapa para planejar a expansão. **✓ = já funciona · ▶ = planejado (já no roadmap) ·
 > 💡 = ideia nova a avaliar.** Cada item traz, em uma linha, o valor para o advogado.

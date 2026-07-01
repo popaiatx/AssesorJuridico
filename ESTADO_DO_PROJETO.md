@@ -1,4 +1,4 @@
-# Estado do projeto — Assistente Jurídico no WhatsApp
+# Estado do projeto — estagiárIA (assistente jurídica no WhatsApp)
 
 > Documento vivo (convenção C do `CLAUDE.md`). Resumo do estado atual para
 > retomar o trabalho a qualquer momento. **Não é changelog** — o histórico está
@@ -6,7 +6,7 @@
 >
 > Mapa prático de módulos e como testar: [`GUIA.md`](GUIA.md). Roteiros de
 > ingestão/sync e validação A/B/C: [`README.md`](README.md). Visão de produto em
-> linguagem simples (uso + roadmap): [`MANUAL_DO_ASSESSOR.md`](MANUAL_DO_ASSESSOR.md).
+> linguagem simples (uso + roadmap): [`MANUAL_DA_ESTAGIARIA.md`](MANUAL_DA_ESTAGIARIA.md).
 
 ## Fase atual
 
@@ -16,7 +16,7 @@
   (Planalto), detectando novo/alterado/revogado, re-embedando só o que muda, com
   vigência na busca (revogada nunca afirma) — tudo sem afrouxar o antialucinação.
   Corpus carregado e validado pela CLI. Concluído também o **Passo 9 — Memória de
-  conversa**: o assessor mantém o fio do assunto entre mensagens (resolve "dela"/"o
+  conversa**: a estagiárIA mantém o fio do assunto entre mensagens (resolve "dela"/"o
   artigo seguinte") e percebe mudança de assunto, **sem a memória virar fonte** e sem
   afrouxar isolamento/antialucinação. Concluído também o **Passo 10 — Lembrete
   proativo**: job agendado (Railway Cron) que avisa o advogado antes de
@@ -36,10 +36,15 @@
   releitura; validável pela CLI `doc:summary`). Concluído também o **Passo 13 — OCR
   local** (PDF escaneado/foto lidos por OCR dentro do ambiente — documento nunca sai;
   vira `ok_ocr`/`ok_ocr_parcial` e sai do ponto cego; baixa confiança não indexa;
-  transparência "lido por OCR"; validável por `doc:process`/`doc:ocr`). Falta **agendar os Crons no Railway** (sync semanal + lembretes 15
-  min), **aprovar o template `lembrete_generico` na Meta**, **criar o bucket
-  `documentos`** e **validar pelo WhatsApp** (download de mídia, chip).
-  Próximo: **jurisprudência** ou **Cérebro 3 (tribunais)**.
+  transparência "lido por OCR"; validável por `doc:process`/`doc:ocr`). Concluído
+  também o **Passo 14 — renomeação para estagiárIA** (textos de produto e prompts de
+  persona; grafia oficial fixada no `CLAUDE.md`; manual renomeado para
+  `MANUAL_DA_ESTAGIARIA.md` + PDF; identificadores técnicos intocados). O
+  **`PLANO_EXPANSAO.md` foi APROVADO na revisão de 2026-07-01** (decisões
+  registradas na seção 9). Falta **agendar os Crons no Railway** (sync semanal + lembretes 15
+  min), **aprovar o template `lembrete_generico` na Meta** (submeter já como
+  estagiárIA), **criar o bucket `documentos`** e **validar pelo WhatsApp** (download de mídia, chip).
+  Próximo: **Passo 15 — ficha do processo** (Fase A do plano de expansão).
   Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B) — pelo chip.
 
 ## O que já está pronto
@@ -228,6 +233,16 @@
   entram na busca; 5 páginas → `ok_ocr_parcial` (3/5); ilegível → `sem_texto` sem chaves;
   `doc:ocr` rescata legível e é idempotente; isolamento (A não faz OCR de doc de B).
   **320 testes verdes. Railway: OCR usa ~150–300MB de pico → container ≥1GB.**
+- **Passo 14 — renomeação para estagiárIA.** Nome do produto trocado em TODOS os
+  textos voltados ao usuário: boas-vindas/termo do onboarding, placeholders,
+  lembrete proativo ("aviso automático da sua estagiárIA"), descrição da assinatura
+  no Asaas, prompts de persona (o LLM se apresenta como estagiárIA, grafia fixada no
+  prompt). Manual renomeado (`MANUAL_DA_ESTAGIARIA.md` + PDF regenerado); README/
+  ESTADO/PLANEJAMENTO/PLANO atualizados; grafia oficial documentada no `CLAUDE.md`
+  ("estagiárIA", IA maiúsculo, feminino, inclusive em início de frase). **Nenhum
+  identificador técnico mudou** (repo, tabelas, variáveis, `ajuda_assessor` etc.).
+  Template `lembrete_generico` será submetido à Meta já com o nome novo. Testes com
+  asserções da marca. **320 testes verdes.**
 - **Fix Node 20 / WebSocket.** O `@supabase/supabase-js` construía um RealtimeClient
   que exigia WebSocket nativo (só no Node 22+), quebrando todos os scripts de banco
   no Node 20. `admin.ts` passou a desligar o Realtime (transport no-op) — roda no
@@ -355,14 +370,13 @@
 
 ## Próximos passos previstos
 
-> **MUDANÇA DE DIREÇÃO (2026-07-01): existe um plano de expansão completo em
-> [`PLANO_EXPANSAO.md`](PLANO_EXPANSAO.md) — renomeação para "estagiárIA", uma
-> conta/dois canais (WhatsApp + dashboard web), ficha do processo + financeiro,
-> documentos em pastas e dashboard com chat (Passos 14–24, Fases A/B/C).
-> Status: PROPOSTA aguardando aprovação do sócio — NADA implementado ainda.**
+> **MUDANÇA DE DIREÇÃO (2026-07-01): plano de expansão em
+> [`PLANO_EXPANSAO.md`](PLANO_EXPANSAO.md) — estagiárIA, uma conta/dois canais
+> (WhatsApp + dashboard web), ficha do processo + financeiro, documentos em
+> pastas e dashboard com chat (Passos 14–24, Fases A/B/C). **APROVADO na revisão
+> de 2026-07-01** (decisões na seção 9 do plano). Passo 14 (renomeação) FEITO.**
 
-1. **Decidir/aprovar o `PLANO_EXPANSAO.md`** (por fase); com aprovação, a Fase A
-   começa no Passo 14 (renomeação).
+1. **Passo 15 — ficha do processo** (Fase A; aguarda o "aprovado" do passo).
 2. **Agendar os Railway Crons** (sync semanal + lembretes 15 min), **aprovar o template
    na Meta**, **criar o bucket `documentos`** e **validar pelo WhatsApp** (memória, C1,
    RAG, lembrete, documentos) quando houver chip; pagamento sandbox (6B).

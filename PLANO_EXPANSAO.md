@@ -77,7 +77,7 @@ Nenhuma fase deste plano afrouxa:
 | Onde | O quê |
 |---|---|
 | Mensagens do assistente | Boas-vindas do onboarding, ajuda, placeholders honestos, avisos ("seu assessor" → "sua estagiárIA"), assinatura do lembrete proativo |
-| `MANUAL_DO_ASSESSOR.md` | Título e corpo (vira `MANUAL_DA_ESTAGIARIA.md` ou mantém o arquivo e muda o título — decidir na revisão; links em ESTADO/GUIA/README acompanham) |
+| `MANUAL_DA_ESTAGIARIA.md` | Título e corpo (DECIDIDO na revisão: arquivo renomeado de `MANUAL_DO_ASSESSOR.md`; links em ESTADO/GUIA/README acompanham) |
 | README / GUIA / ESTADO | Referências de produto (não as técnicas) |
 | Templates Meta (futuros) | O template `lembrete_generico` ainda NÃO foi submetido — submeter já com o nome novo (economiza uma re-aprovação) |
 | Dashboard (Fase C) | Nasce já com a marca |
@@ -505,11 +505,17 @@ de A se quisermos acelerar — decisão de gestão, não técnica.
 
 ## 9. O que preciso de vocês (decisões em aberto para a revisão)
 
+> **REVISADO em 2026-07-01 (advogada + sócio): itens 1–5 APROVADOS como propostos.**
+> Detalhes: memória compartilhada COM marca de canal; manual renomeado; fusão de
+> contas sempre assistida/auditada, e o fluxo detalhado do que o usuário vê será
+> apresentado para aprovação antes de implementar essa parte (Fase B). E-mail
+> igual JAMAIS unifica contas; código reverso é o mecanismo de prova de posse.
+
 1. **Aprovação da estrutura A→B→C** e do corte da v1 do dashboard (5.2).
 2. **Memória compartilhada entre canais** (5.3) — recomendo sim; confirmar.
 3. **Stack do front** (5.1: Vite+React servido pelo Fastify) — confirmar.
 4. **Renomeação:** manter arquivo `MANUAL_DO_ASSESSOR.md` (título muda dentro)
-   ou renomear para `MANUAL_DA_ESTAGIARIA.md`?
+   ou renomear para `MANUAL_DA_ESTAGIARIA.md`? **DECIDIDO: renomeado.**
 5. **Política de fusão assistida** (4.4, caso "ambos com dados") — confirmar
    que fica fora do automático na v1.
 6. Nada deste plano será implementado sem o "aprovado" por fase.

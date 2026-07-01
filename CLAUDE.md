@@ -4,7 +4,11 @@ Regras e contexto para o Claude Code trabalhar neste repositório. **Leia també
 
 ## Contexto
 
-Assessor jurídico pessoal que funciona pelo WhatsApp. Advogados conversam em linguagem natural; o sistema executa ações (processos, prazos, financeiro) e responde dúvidas jurídicas **sempre com fonte verificável (RAG)**. Público: advogados autônomos e escritórios pequenos/médios.
+**estagiárIA** — assistente jurídica pessoal que funciona pelo WhatsApp. Advogados conversam em linguagem natural; o sistema executa ações (processos, prazos, financeiro) e responde dúvidas jurídicas **sempre com fonte verificável (RAG)**. Público: advogados autônomos e escritórios pequenos/médios.
+
+### Nome do produto (grafia oficial)
+
+O produto se chama **estagiárIA**: "estagiár" minúsculo + "IA" maiúsculo (de Inteligência Artificial), **inclusive em início de frase e em títulos**. Gênero feminino: "a estagiárIA", "sua estagiárIA", adjetivos no feminino. Não flexionar nem abreviar o nome. A grafia vale para TODO texto voltado ao usuário (mensagens do assistente, manual, README, dashboard, templates do WhatsApp). **Identificadores técnicos NÃO mudam** (repositório, pastas, tabelas, variáveis, nomes de ações como `ajuda_assessor`): texto de produto é marca; identificador é contrato de código.
 
 **Prioridade absoluta deste projeto:** confiabilidade, robustez e segurança dos dados e das fontes — acima de velocidade e custo. Em qualquer dúvida de design, escolha a opção mais segura e auditável.
 

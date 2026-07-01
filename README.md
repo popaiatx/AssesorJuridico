@@ -1,6 +1,6 @@
-# Assistente Jurídico no WhatsApp — Fundação (Fase 1)
+# estagiárIA — assistente jurídica no WhatsApp
 
-Assessor jurídico pessoal que funciona pelo WhatsApp. Este repositório está na
+A estagiárIA é uma assistente jurídica pessoal que funciona pelo WhatsApp. Este repositório está na
 **Fase 1 (Núcleo)**; este passo entregou **apenas a fundação** — estrutura em
 camadas, banco com isolamento por tenant, interfaces (ports) e health check.
 **Ainda não há funcionalidades de produto.**
@@ -9,8 +9,8 @@ Leia antes de evoluir: [`CLAUDE.md`](./CLAUDE.md), [`PLANEJAMENTO.md`](./PLANEJA
 e as skills em `.claude/skills/`. Para um **mapa do que já existe e como testar cada
 módulo**, veja o [`GUIA.md`](./GUIA.md) (estado canônico em
 [`ESTADO_DO_PROJETO.md`](./ESTADO_DO_PROJETO.md)). Para uma visão **em linguagem
-simples** (o que o assessor faz, como falar com ele e a visão de produto), veja o
-[`MANUAL_DO_ASSESSOR.md`](./MANUAL_DO_ASSESSOR.md).
+simples** (o que a estagiárIA faz, como falar com ela e a visão de produto), veja o
+[`MANUAL_DA_ESTAGIARIA.md`](./MANUAL_DA_ESTAGIARIA.md).
 
 ## Stack
 
@@ -83,8 +83,8 @@ extrai parâmetros; o **código executa** por query parametrizada e tipada.
   `consultar_processo`, `editar_processo`, `arquivar_processo`, `ajuda_assessor`
   (registro tipado, fácil de expandir — financeiro/honorários virão depois).
 - **Editar/remover (Passo 11):** o alvo é resolvido por um **seletor** (processo/
-  tipo/dia, ou CNJ/cliente/parte) **escopado por tenant**; se casar com vários, o
-  assessor **pergunta qual** (lista numerada) — **nunca adivinha**; se nenhum, avisa.
+  tipo/dia, ou CNJ/cliente/parte) **escopado por tenant**; se casar com vários, a
+  estagiárIA **pergunta qual** (lista numerada) — **nunca adivinha**; se nenhum, avisa.
   A confirmação mostra o **registro real** (reforçada na remoção: "⚠️ vou REMOVER…,
   definitivo"). **Remarcar recalcula os lembretes** (24h/1h da nova data, nada no
   passado) e descarta a marcação antiga. Compromisso é removido de fato; processo é
@@ -265,7 +265,7 @@ presentes são puladas (hash igual) e **só a nova entra**.
 
 ## Memória de conversa (Passo 9)
 
-O assessor mantém o **fio do assunto** entre mensagens: resolve referências como
+A estagiárIA mantém o **fio do assunto** entre mensagens: resolve referências como
 *"e o prazo dela?"* ou *"e o artigo seguinte?"* e percebe quando o usuário **muda de
 assunto**. Princípios:
 
@@ -382,7 +382,7 @@ horário de disparo** e o **texto final** (em horário de Brasília).
 
 ## Gestão de documentos (Passo 12A)
 
-Primeira vez que o assessor lida com **arquivos**. Ao receber um documento, decide
+Primeira vez que a estagiárIA lida com **arquivos**. Ao receber um documento, decide
 (com o usuário) se **resume, salva ou ambos**; e **sempre que salva** extrai e guarda
 **informações-chave** (tipo, partes, números, datas, assunto, resumo) — é o que vai
 permitir **encontrá-lo depois** (a busca é o 12B).
@@ -731,7 +731,7 @@ A rota `/webhooks/asaas` só existe depois deste passo no ar. Ordem:
    `ASAAS_WEBHOOK_SECRET=<um token que você inventa>`. Faça o redeploy → o log
    mostra "Asaas habilitado (sandbox)".
 3. **Webhook no Asaas** (*Configurações › Notificações/Webhooks › Adicionar*):
-   - **Nome:** livre (ex.: "Assessor Juridico - Pagamentos").
+   - **Nome:** livre (ex.: "estagiarIA - Pagamentos").
    - **URL:** `https://SEU-DOMINIO/webhooks/asaas`.
    - **Versão da API:** `v3` (não muda depois).
    - **Token de autenticação:** **exatamente** o mesmo valor de

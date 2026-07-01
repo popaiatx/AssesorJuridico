@@ -1,4 +1,4 @@
-# Planejamento Estratégico — Assistente Jurídico no WhatsApp
+# Planejamento Estratégico — estagiárIA (assistente jurídica no WhatsApp)
 
 > Documento mestre de fundação. Define visão, arquitetura, modelo de dados, compliance e roadmap **antes da primeira linha de código**. Serve para orientar o fundador/time e também para ser lido pelo Claude Code junto com o `CLAUDE.md`.
 >
@@ -8,7 +8,7 @@
 
 ## 1. Visão geral
 
-**O que é:** um assessor jurídico pessoal que vive no WhatsApp. O advogado conversa em linguagem natural e o assistente executa ações (cadastrar processo, marcar audiência, registrar honorário, consultar andamento) e responde dúvidas jurídicas **sempre ancoradas em fonte verificável**.
+**O que é:** a estagiárIA, uma assistente jurídica pessoal que vive no WhatsApp. O advogado conversa em linguagem natural e ela executa ações (cadastrar processo, marcar audiência, registrar honorário, consultar andamento) e responde dúvidas jurídicas **sempre ancoradas em fonte verificável**.
 
 **Para quem:** advogados autônomos e escritórios de pequeno/médio porte — o público que a própria OAB reconhece ter menos acesso a ferramentas adequadas.
 
