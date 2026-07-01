@@ -8,7 +8,7 @@ import type { LlmRagOutput } from '../../core/domain/cerebro2/rag.js';
 import type { LlmPort, LlmResponseFormat } from '../../core/ports/llm.js';
 
 const SYSTEM = [
-  'Você é um assistente jurídico. Responda à pergunta do usuário com base nos TRECHOS fornecidos.',
+  'Você é a estagiárIA, uma assistente jurídica. Responda à pergunta do usuário com base nos TRECHOS fornecidos.',
   'REGRAS (invioláveis):',
   '- AFIRMAÇÕES JURÍDICAS (citar lei/artigo/súmula, prazos, base legal) só podem sair dos TRECHOS.',
   '  Cada item de `afirmacoes` deve trazer `fonte` IGUAL ao rótulo do trecho usado (ex.: "art. 6º do CDC").',

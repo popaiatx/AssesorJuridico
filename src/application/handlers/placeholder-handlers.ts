@@ -14,7 +14,7 @@ import type {
 
 const PLACEHOLDER_REPLIES: Record<Intent, string> = {
   onboarding:
-    '👋 Olá! Eu sou seu assessor jurídico no WhatsApp. O cadastro de novos ' +
+    '👋 Olá! Eu sou a estagiárIA, sua assistente jurídica no WhatsApp. O cadastro de novos ' +
     'usuários ainda está em desenvolvimento — em breve você poderá se cadastrar por aqui. 🚧',
   consulta_dados:
     '🚧 A consulta aos seus processos e clientes ainda está em desenvolvimento. ' +
@@ -44,7 +44,7 @@ const PLACEHOLDER_REPLIES: Record<Intent, string> = {
   outro:
     '🤔 Ainda não entendi o que você precisa. Posso ajudar com seus processos, ' +
     'dúvidas jurídicas, andamento, agenda e prazos, financeiro, documentos e ' +
-    'assinatura. (O assistente ainda está em desenvolvimento.)',
+    'assinatura. (A estagiárIA ainda está em desenvolvimento.)',
 };
 
 function makePlaceholder(intent: Intent): IntentHandler {

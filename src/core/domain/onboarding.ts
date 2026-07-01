@@ -39,9 +39,9 @@ export const CONSENT_VERSION = '1.0';
 
 const CONSENT_TEXT =
   '📄 *Termo de uso de IA*\n' +
-  'Este assistente usa inteligência artificial para te apoiar. As respostas são de ' +
+  'A estagiárIA usa inteligência artificial para te apoiar. As respostas são de ' +
   'apoio e NÃO substituem orientação profissional. Conteúdo jurídico é fornecido com ' +
-  'a fonte (lei/precedente); sem fonte, o assistente recusa. Seus dados são tratados ' +
+  'a fonte (lei/precedente); sem fonte, ela recusa. Seus dados são tratados ' +
   'conforme a LGPD.';
 
 const ASK = {
@@ -51,7 +51,7 @@ const ASK = {
 };
 
 const WELCOME =
-  '👋 Olá! Eu sou um assistente jurídico no WhatsApp. Posso te ajudar a entender temas ' +
+  '👋 Olá! Eu sou a estagiárIA — sua assistente jurídica no WhatsApp. Posso te ajudar a entender temas ' +
   'jurídicos em linguagem simples e, em breve, organizar processos, prazos e documentos. ' +
   'Funciona para advogados, estudantes e curiosos — e você tem *3 dias grátis* para ' +
   'experimentar. O cadastro é rapidinho (e a qualquer momento você pode escrever ' +

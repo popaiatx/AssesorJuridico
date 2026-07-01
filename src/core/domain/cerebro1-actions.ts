@@ -439,7 +439,7 @@ const arquivarProcessoAcao: ActionDef = {
 const ajudaAssessor: ActionDef = {
   name: 'ajuda_assessor',
   kind: 'ajuda',
-  description: 'Explicar, em linguagem simples, o que o assessor organiza.',
+  description: 'Explicar, em linguagem simples, o que a estagiárIA organiza.',
   inputSchema: { type: 'object', additionalProperties: false, properties: {}, required: [] },
   validate() {
     return { value: {}, faltando: [], erro: null };

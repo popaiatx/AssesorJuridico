@@ -9,6 +9,7 @@ describe('advanceOnboarding (máquina enxuta: nome → e-mail → consentimento)
     expect(out.etapa).toBe('aguardando_nome');
     expect(out.evento).toBe('iniciado');
     expect(out.reply.toLowerCase()).toContain('3 dias'); // intro acolhedora menciona o trial
+    expect(out.reply).toContain('estagiárIA'); // apresenta-se pelo nome, grafia oficial
   });
 
   it('fluxo completo até criar (sem OAB/documento)', () => {

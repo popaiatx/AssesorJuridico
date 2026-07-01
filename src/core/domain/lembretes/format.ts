@@ -58,5 +58,5 @@ export function montarMensagemLembrete(r: DueReminder, timeZone: string, now: Da
   const quando = formatarQuando(r.dataHora, timeZone, now);
   const proc = r.processoNumero ? ` do processo ${r.processoNumero}` : '';
   const cli = r.clienteNome ? ` (cliente ${r.clienteNome})` : '';
-  return `🔔 Lembrete: ${tipo}${proc}${cli} ${quando} — aviso automático do seu assessor.`;
+  return `🔔 Lembrete: ${tipo}${proc}${cli} ${quando} — aviso automático da sua estagiárIA.`;
 }

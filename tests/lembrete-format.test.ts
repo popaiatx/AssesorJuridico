@@ -44,6 +44,7 @@ describe('montarMensagemLembrete', () => {
     expect(msg).toContain('Maria Silva');
     expect(msg).toContain('amanhã às 14:00');
     expect(msg).toContain('aviso automático');
+    expect(msg).toContain('estagiárIA'); // marca com a grafia oficial (IA maiúsculo)
   });
   it('sem processo/cliente → omite sem quebrar', () => {
     const now = new Date('2026-06-30T12:00:00Z');

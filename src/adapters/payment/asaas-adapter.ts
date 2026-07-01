@@ -80,7 +80,7 @@ export class AsaasAdapter implements PaymentPort {
       value: VALOR_MENSAL,
       nextDueDate,
       cycle: 'MONTHLY',
-      description: 'Assinatura Assessor Jurídico',
+      description: 'Assinatura estagiárIA',
       externalReference: input.assinanteId,
     });
     if (!sub.id) throw new Error('Asaas: criação de assinatura sem id.');
