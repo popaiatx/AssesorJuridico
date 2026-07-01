@@ -126,6 +126,12 @@ const RULES: Record<Exclude<Intent, 'outro'>, Rule[]> = {
     { kw: 'enviar documento', w: 2 },
     { kw: 'peticao', w: 1 },
     { kw: 'foto', w: 1 },
+    // 12C: resumir documento guardado (fallback; o classificador LLM+memória cobre
+    // ordinais como "resume o segundo"). Peso 1 p/ não sobrepor termos mais fortes.
+    { kw: 'resumo', w: 1 },
+    { kw: 'resumir', w: 1 },
+    { kw: 'resume', w: 1 },
+    { kw: 'resuma', w: 1 },
   ],
   assinatura: [
     { kw: 'assinatura', w: 2 },

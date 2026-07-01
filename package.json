@@ -24,6 +24,7 @@
     "doc:process": "tsx scripts/doc-process.ts",
     "doc:reindex": "tsx scripts/doc-reindex.ts",
     "doc:search": "tsx scripts/doc-search.ts",
+    "doc:summary": "tsx scripts/doc-summary.ts",
     "doc:doctor": "tsx scripts/doc-doctor.ts",
     "doc:bucket": "tsx scripts/doc-bucket.ts",
     "ask:rag": "tsx scripts/ask-rag.ts",

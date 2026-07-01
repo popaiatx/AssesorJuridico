@@ -44,6 +44,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | **Lembrete proativo** | Job agendado avisa o advogado antes de audiências/prazos (24h e 1h antes), idempotente, no fuso de Brasília, via template aprovado. |
 | **Documentos (12A)** | Recebe arquivo, decide (resumir/salvar/ambos), lê o texto e guarda com informações-chave (para achar depois); bucket privado isolado por tenant. |
 | **Busca de documentos (12B)** | Acha um documento guardado por referência exata (número/nome/trecho) ou vaga (assunto), combinando busca textual + semântica; só do próprio assinante; devolve link assinado. |
+| **Resumir documento guardado (12C)** | Devolve o resumo de um documento do acervo (por ordinal da última busca, nome/número ou contexto): resumo salvo (instantâneo) ou novo relendo o Storage; isolado por tenant também na releitura. |
 
 ---
 
@@ -120,6 +121,13 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Testar — automatizado:** `tests/buscar-documentos.test.ts` (tokens; combinação/Top N; fallback sem embeddings; **isolamento exaustivo com 2 assinantes** — A nunca vê o de B nem sendo o vetor mais próximo; número só-de-B → vazio; ponto cego conta só A; handler só assina a URL do dono). Isolamento também validado em **Postgres real (RLS)**.
 - **Testar — manual SEM chip (CLI):** `npm run doc:doctor` (confere migração/pgvector/bucket) → `npm run doc:bucket` (cria o bucket se faltar) → `npm run doc:reindex` (backfill de embeddings, idempotente) → `npm run doc:search -- --telefone <tel> "<referência>"`. Rode com telefones de **dois** assinantes para provar o isolamento. Robustez: pré-requisito faltando (bucket/migração/.env) dá **mensagem clara**, não stack trace; arquivo acima de `DOCUMENTOS_MAX_MB` é recusado com aviso; formato não suportado/escaneado é guardado com aviso de ponto cego.
 
+### 11. Resumir documento guardado (12C)
+- **Faz:** devolve o resumo de um documento **já no acervo** (sem reenviar). Referência por ordinal da última busca ("resume o segundo"), por nome/número ("resume o do João", "resume o do protocolo 5551") ou pelo contexto. **Padrão:** resumo salvo (instantâneo, sem LLM, com aviso); doc `ok` sem resumo → gera relendo o Storage e **persiste**. **Sob demanda** ("focando nos prazos", "mais detalhado") → gera novo relendo o Storage (map-reduce), **não** persiste. `sem_texto` → avisa (não dá). Vários → desambigua; nenhum → claro; ordinal sem busca recente → pede para buscar.
+- **Arquivos:** `src/core/domain/documentos/pedido-resumo.ts` (interpreta buscar vs resumir/ordinal/foco), `src/application/documentos/resumir-documento.ts` (serviço; releitura do Storage isolada por tenant + `setResumo`), `document-search-handler.ts` (despacho + ordinal via memória), memória (`docIds` no turno) e orquestrador. **Sem migração** (`resumo` já existe; lista da última busca vai na memória jsonb).
+- **Isolamento:** posse re-verificada por tenant (`getById`) **antes** de reler o Storage; `storage_ref` sempre da própria linha; `setResumo` por tenant; a lista da última busca é do próprio assinante e cada id passa por `getById` ao usar.
+- **Testar — automatizado:** `tests/pedido-resumo.test.ts` (parser) e `tests/resumir-documento.test.ts` + casos no `tests/buscar-documentos.test.ts` (ordinal, desambiguação, foco, **isolamento A×B com asserção de que o Storage de B nunca é lido**).
+- **Testar — manual SEM chip (CLI):** `npm run doc:summary -- --telefone <tel> "<referência>" [--modo guardado|novo] [--foco "..."]`.
+
 ---
 
 ## Comandos úteis (scripts npm)
@@ -140,6 +148,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | `npm run doc:process -- <arquivo> --telefone <tel> [--acao …] [--processo …]` | Processa um documento local (resumir/salvar/ambos) pelo caminho real. | Validar documentos (12A) sem chip. |
 | `npm run doc:reindex [-- --lote N]` | **Backfill** dos embeddings de documentos sem vetor (idempotente; back-office). | Preparar a busca semântica em acervo já existente (12B). |
 | `npm run doc:search -- --telefone <tel> "<referência>"` | Busca documentos pelo caminho real (exata + semântica; link assinado). | Validar a busca e o **isolamento** (12B) sem chip. |
+| `npm run doc:summary -- --telefone <tel> "<referência>" [--modo guardado\|novo] [--foco "..."]` | Resume um documento guardado (salvo ou novo relendo o Storage). | Validar o resumo (12C) e o isolamento na releitura sem chip. |
 | `npm run doc:doctor` | Diagnóstico (somente leitura) dos pré-requisitos do fluxo: banco, colunas/migração, pgvector, bucket. | Antes de rodar o fluxo de documentos; achar o que falta. |
 | `npm run doc:bucket` | Cria o bucket privado `DOCUMENTOS_BUCKET` (idempotente). | Primeiro uso do fluxo de documentos. |
 | `npm run seed:assinante -- <tel>` | Cria/atualiza um assinante de teste (admin). | Destravar testes sem onboarding. |
@@ -170,6 +179,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | Lembrete proativo — envio real + template Meta | ✅ (código) | ❌ PENDENTE | **Sim** (chip + aprovação) |
 | Documentos (12A) — ler/resumir/guardar + chaves | ✅ | ✅ validável por `doc:process` | **Não** — valida pela CLI (bucket privado no Supabase) |
 | Documentos (12B) — buscar (exata + semântica) + isolamento | ✅ | ✅ validável por `doc:reindex` + `doc:search` | **Não** — valida pela CLI (isolamento provado em testes + Postgres real) |
+| Documentos (12C) — resumir guardado (salvo/novo) + isolamento na releitura | ✅ | ✅ validável por `doc:summary` | **Não** — valida pela CLI (isolamento da releitura provado em testes + ponta a ponta) |
 | Documentos — receber pelo WhatsApp (download da mídia) | ✅ (código) | ❌ PENDENTE | **Sim** (chip) |
 | Documentos — PDF-imagem/foto (OCR) | ❌ Ainda não | — | Avisa e marca `sem_texto` (ponto cego da busca) |
 | Migrações 0019 (sync) / 0020 (memória) / 0021 (lembrete) / 0024 (embedding doc) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |

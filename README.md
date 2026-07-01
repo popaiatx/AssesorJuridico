@@ -474,6 +474,44 @@ npm run doc:search -- --telefone 5511999990001 "5551"   # fragmento de protocolo
 > (`doc:process` com telefones diferentes) e rode `doc:search` com cada telefone — cada
 > um só enxerga os próprios documentos; a referência de um **nunca** traz o do outro.
 
+## Resumir documento guardado (Passo 12C)
+
+Fecha o ciclo: pedir o **resumo de um documento que já está no acervo**, sem reenviar o
+arquivo. O usuário se refere ao documento por **ordinal da última busca** ("resume o
+segundo"), por **nome/número** ("resume o do João", "resume o do protocolo 5551") ou pelo
+**contexto**.
+
+- **Padrão (`guardado`):** devolve o **resumo já salvo** — instantâneo, **sem nova chamada
+  de LLM** —, sempre com o aviso de apoio/conferência. Se o documento é `ok` mas ainda
+  **não tem resumo** (foi salvo sem resumir), gera relendo o Storage e **persiste** (o
+  acervo fica mais rico; a próxima vez é instantânea).
+- **Sob demanda (`novo` / `--foco`):** "resume focando nos prazos", "mais detalhado" →
+  gera um resumo **novo** relendo o arquivo do Storage (map-reduce p/ documento longo),
+  com foco custom; **não** persiste.
+- **`sem_texto` (escaneado):** não há texto para resumir → avisa (ponto cego), não tenta.
+- **Referência ambígua** → pergunta qual (desambiguação numerada). **Nenhuma** → resposta
+  clara. **Ordinal sem busca recente** (memória expirou) → não adivinha, pede para buscar.
+- **Isolamento:** a posse é re-verificada por tenant (`getById`, RLS) **antes** de reler o
+  arquivo; a releitura usa o `storage_ref` da própria linha do tenant — **nunca** um id/ref
+  vindo do usuário nem de lista alheia. `setResumo` também é escopado por tenant. A lista
+  da última busca (para "o segundo") vive na **memória do próprio assinante** e cada id
+  ainda passa por `getById` ao ser usado.
+
+### Testar pela CLI (sem chip)
+
+```bash
+# Resumo guardado (instantâneo se já existe; senão gera e persiste):
+npm run doc:summary -- --telefone 5511999990001 "contrato de aluguel"
+npm run doc:summary -- --telefone 5511999990001 "5551"   # por número
+
+# Sob demanda (regenera relendo o Storage; não persiste):
+npm run doc:summary -- --telefone 5511999990001 "contrato" --modo novo --foco "prazos"
+```
+
+> Ordinais como "resume o segundo" dependem da **memória entre turnos** (WhatsApp) e são
+> cobertos por testes automatizados; na CLI a referência é por nome/número. O isolamento na
+> releitura do Storage é testado com 2 assinantes (A nunca lê/gera resumo de documento de B).
+
 ## Webhook do WhatsApp (Cloud API)
 
 Entrada real do produto. Só é registrado se as `WHATSAPP_*` estiverem
@@ -711,7 +749,8 @@ curl localhost:3000/health/ready  # confere o banco (503 se indisponível)
 Scripts: `dev`, `build`, `start`, `typecheck`, `lint`, `format`, `test`,
 `seed:assinante`, `reset:assinante`, `trial:expire`, `ingest:corpus`,
 `sync:corpus`, `ask:rag`, `send:lembretes`, `doc:process`, `doc:reindex`,
-`doc:search`, `doc:doctor` (diagnóstico de pré-requisitos do fluxo de documentos),
+`doc:search`, `doc:summary` (resume um documento guardado — 12C),
+`doc:doctor` (diagnóstico de pré-requisitos do fluxo de documentos),
 `doc:bucket` (cria o bucket privado), `db:start`, `db:reset`, `db:migration`,
 `db:push`.
 

@@ -30,7 +30,10 @@
   de documentos** (achar por referência exata e/ou semântica, sem lembrar o nome do
   arquivo; embedding-on-write + backfill `doc:reindex`; isolamento por tenant embutido
   na query — exata e semântica — com RLS de backstop; validável pelas CLIs `doc:reindex`
-  + `doc:search`). Falta **agendar os Crons no Railway** (sync semanal + lembretes 15
+  + `doc:search`). Concluído também o **Passo 12C — resumir documento guardado**
+  (resumo salvo instantâneo ou novo relendo o Storage com foco; referência por ordinal
+  da última busca/nome/número/contexto; isolamento re-verificado por tenant antes da
+  releitura; validável pela CLI `doc:summary`). Falta **agendar os Crons no Railway** (sync semanal + lembretes 15
   min), **aprovar o template `lembrete_generico` na Meta**, **criar o bucket
   `documentos`** e **validar pelo WhatsApp** (download de mídia, chip).
   Próximo: **jurisprudência** ou **Cérebro 3 (tribunais)**.
@@ -188,6 +191,23 @@
   guardado com aviso de ponto cego, e mensagens claras de pré-requisito (bucket
   ausente etc.). Ferramentas: `doc:doctor` (diagnóstico) e `doc:bucket` (cria o
   bucket privado). **284 testes verdes.**
+- **Passo 12C — resumir documento guardado (sem reenviar).** `ResumirDocumento`
+  (application): PADRÃO devolve o `resumo` salvo (instantâneo, sem LLM, com aviso);
+  doc `ok` sem resumo → gera relendo o Storage e **persiste** (`setResumo`, coluna já
+  existe — **sem migração**); SOB DEMANDA (`novo`/`foco`) gera novo relendo o Storage
+  (map-reduce, `resumir(foco)`), sem persistir; `sem_texto` → aviso de ponto cego.
+  Referência resolvida no handler do intent `documento`: parser puro
+  (`pedido-resumo.ts`) distingue buscar/resumir e extrai ordinal ("o segundo")/foco;
+  ordinal resolve pela **última lista guardada na memória** (novo campo `docIds` no
+  turno — jsonb, sem migração; `HandlerResult.documentosListados` + orquestrador);
+  referência por nome/número roda a busca (0 claro / 1 resume / >1 desambigua); ordinal
+  sem lista recente → não adivinha. ISOLAMENTO: `getById` re-verifica a posse por
+  tenant ANTES de reler o Storage; releitura só pelo `storageRef` da própria linha;
+  `setResumo` por tenant; ordinal também passa por `getById`. Fallback do classificador
+  ganhou termos de resumo. CLI `doc:summary` (`--modo`, `--foco`). Validado **ponta a
+  ponta** (Supabase real, 2 assinantes): resumo guardado sem LLM; gera+persiste
+  (peticao passou de sem-resumo → com-resumo); foco; `sem_texto`; e **A resumindo doc
+  de B por id → barrado, `storage.getDocument` NUNCA chamado (0)**. **306 testes verdes.**
 - **Fix Node 20 / WebSocket.** O `@supabase/supabase-js` construía um RealtimeClient
   que exigia WebSocket nativo (só no Node 22+), quebrando todos os scripts de banco
   no Node 20. `admin.ts` passou a desligar o Realtime (transport no-op) — roda no
@@ -293,11 +313,11 @@
 - **Validar em produção** (acumulado): Cérebro 1, pagamento sandbox (6B), RAG.
 - **Onboarding — verificação real da inscrição na OAB** contra fonte externa
   (removida do fluxo obrigatório; pode virar opção futura).
-- **Documentos:** **busca (12B) — FEITA e validada de ponta a ponta** (`doc:doctor` →
-  `doc:bucket` → `doc:process` → `doc:reindex` → `doc:search`). O **bucket** se cria com
-  `npm run doc:bucket` (já criado no projeto atual). PENDENTE: **OCR** de imagem/PDF
-  escaneado (ponto cego da busca); **download de mídia pelo WhatsApp** (código pronto,
-  valida com o chip). Eventual: repedir o resumo a partir de um resultado da busca.
+- **Documentos:** **busca (12B) e resumo (12C) — FEITOS e validados de ponta a ponta**
+  (`doc:doctor` → `doc:bucket` → `doc:process` → `doc:reindex` → `doc:search` →
+  `doc:summary`). O **bucket** se cria com `npm run doc:bucket` (já criado no projeto
+  atual). PENDENTE: **OCR** de imagem/PDF escaneado (ponto cego da busca e do resumo);
+  **download de mídia pelo WhatsApp** (código pronto, valida com o chip).
 - **WhatsApp:** **download de mídia** (mídia recebida hoje → placeholder até o chip);
   template aprovado na Meta.
 - **Fila durável do webhook** (ack rápido + worker) — caminho de escala.

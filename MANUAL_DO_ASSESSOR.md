@@ -108,9 +108,30 @@ os documentos mais prováveis com um **link para abrir**.
 - Documento que entrou como **foto/escaneado** (sem texto) **não aparece** na busca por
   conteúdo; quando isso for o caso, ele avisa quantos você tem assim e se oferece para
   procurar por nome ou data.
-- Ele **acha e entrega** o documento — não refaz o resumo (é só pedir, se quiser).
+- Ele **acha e entrega** o documento; para o **resumo** de um deles, é só pedir (abaixo).
 
-### 7. Cadastro e acesso
+### 7. Resumir um documento guardado
+**O que faz:** você pede o **resumo de um documento que já está no seu acervo**, sem
+reenviar o arquivo. Pode se referir a ele logo depois de uma busca (*"resume o segundo"*),
+pelo nome/número (*"resume o do João"*, *"resume o do protocolo 5551"*) ou pedir um resumo
+com um foco específico.
+
+**Exemplos:**
+- *"me resume o contrato do João"* → devolve o resumo (na hora, se já existir).
+- Depois de uma busca que listou vários: *"resume o segundo"* → resume o certo da lista.
+- *"resume focando nos prazos"* ou *"faz um resumo mais detalhado"* → ele **relê** o
+  documento e monta um resumo novo com esse foco.
+
+**Importante:**
+- Por padrão ele entrega o **resumo que já tem guardado** — rápido e sem custo. Se o
+  documento foi só salvo (sem resumo ainda), ele lê e monta o resumo na hora — e guarda
+  para as próximas vezes.
+- Documento **escaneado/foto** (sem texto) → ele avisa que não dá para resumir o conteúdo.
+- Se a referência combinar com **vários**, ele pergunta qual; se não achar nenhum, ele diz
+  com clareza. Todo resumo vem com o aviso de que é **apoio** — confira no documento.
+- É **só seu**: ele nunca resume (nem lê) documento de outra pessoa.
+
+### 8. Cadastro e acesso
 **O que faz:** quem é novo simplesmente **manda a primeira mensagem** no WhatsApp. O
 assessor dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pessoa ganha
 **3 dias de teste grátis**. Depois do teste, para continuar usando é preciso
@@ -168,6 +189,7 @@ modelo de mensagem junto à Meta).
 ### Produção de documentos
 - ✓ **Receber, ler e resumir documentos (PDF/Word/texto)** — extrair o essencial e guardar com informações-chave.
 - ✓ **Encontrar documentos por conteúdo** (busca) — achar por número/nome/trecho ou por assunto, sem lembrar o nome do arquivo.
+- ✓ **Resumir um documento guardado** — pedir o resumo de um documento do acervo (por "o segundo", nome/número ou com um foco), sem reenviar o arquivo.
 - ▶ **OCR (ler imagens / PDF escaneado)** — hoje avisa que não consegue.
 - ▶ **Sugerir prazo a partir de uma intimação** — da leitura à agenda, automático.
 - ▶ **Rascunho de peças** (com revisão obrigatória, sem citar o que não foi verificado) — acelerar a redação.
@@ -209,6 +231,7 @@ modelo de mensagem junto à Meta).
 | Editar/cancelar compromissos; editar/arquivar processos | ✅ Sim | Sim | Confirma mostrando o registro real; remarcar reprograma lembretes; processo é arquivado, não apagado |
 | Receber/ler/resumir/guardar documentos (PDF/Word/texto) | ✅ Sim | Recebimento pelo Zap depende do chip | Guarda com informações-chave; PDF-imagem avisa que não leu |
 | Encontrar documentos por conteúdo (busca) | ✅ Sim | Para uso real, sim | Por número/nome/trecho ou por assunto; só os seus; validável internamente |
+| Resumir um documento guardado | ✅ Sim | Para uso real, sim | Resumo salvo (na hora) ou novo com foco; só os seus; validável internamente |
 | Entender áudios | ❌ Ainda não | — | Planejado (por último) |
 | Jurisprudência (decisões/súmulas) | ❌ Ainda não | — | Em breve (provedor especializado) |
 | Andamento processual (tribunais) | ❌ Ainda não | — | Planejado |
