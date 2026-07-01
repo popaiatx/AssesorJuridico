@@ -351,7 +351,11 @@ const cancelarCompromisso: ActionDef = {
 };
 
 const SEL_PROCESSO = {
-  alvo_cnj: { type: 'string', description: 'CNJ do processo alvo (opcional)' },
+  alvo_cnj: {
+    type: 'string',
+    description:
+      'Número do processo alvo: CNJ completo OU um fragmento com 4+ dígitos, ex.: "12345" (opcional)',
+  },
   alvo_cliente: { type: 'string', description: 'Nome do cliente do processo alvo (opcional)' },
   alvo_parte: { type: 'string', description: 'Parte contrária do processo alvo (opcional)' },
 };
@@ -364,9 +368,12 @@ function parseSelectorProcesso(input: Record<string, unknown>): {
   let erro: string | null = null;
   const ac = str(input.alvo_cnj);
   if (ac) {
-    const cnj = normalizeCnj(ac);
-    if (!cnj) erro = 'O número do processo (CNJ) precisa ter 20 dígitos. Pode conferir?';
-    else sel.alvoCnj = cnj;
+    // CNJ completo casa exato; menos que isso REBAIXA para fragmento (≥4 dígitos)
+    // em vez de rejeitar — "processo 12345" é referência natural de advogado.
+    const digits = ac.replace(/\D/g, '');
+    if (digits.length === 20) sel.alvoCnj = digits;
+    else if (digits.length >= 4) sel.alvoNumero = digits;
+    else erro = 'Não reconheci o número. Me diga o CNJ ou um trecho com pelo menos 4 dígitos.';
   }
   const acl = str(input.alvo_cliente);
   if (acl) sel.alvoCliente = acl;
@@ -381,8 +388,8 @@ const editarProcesso: ActionDef = {
   name: 'editar_processo',
   kind: 'edicao',
   description:
-    'Alterar campos de um processo existente (status, cliente, parte contrária ou área). ' +
-    'Identifique o alvo por CNJ, cliente ou parte.',
+    'Alterar campos de um processo existente (status, cliente, parte contrária, área, ' +
+    'fase processual ou instância). Identifique o alvo por número (CNJ ou trecho), cliente ou parte.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,
@@ -392,6 +399,8 @@ const editarProcesso: ActionDef = {
       novo_cliente: { type: 'string', description: 'Novo cliente (opcional)' },
       nova_parte: { type: 'string', description: 'Nova parte contrária (opcional)' },
       nova_area: { type: 'string', description: 'Nova área (opcional)' },
+      nova_fase: { type: 'string', description: 'Nova fase processual, ex.: conhecimento, recurso, execução (opcional)' },
+      nova_instancia: { type: 'string', description: 'Nova instância, ex.: 1º grau, 2º grau, superior (opcional)' },
     },
     required: [],
   },
@@ -407,12 +416,18 @@ const editarProcesso: ActionDef = {
     if (npar) value.novaParte = npar;
     const na = str(input.nova_area);
     if (na) value.novaArea = na;
+    const nf = str(input.nova_fase);
+    if (nf) value.novaFase = nf;
+    const ni = str(input.nova_instancia);
+    if (ni) value.novaInstancia = ni;
 
-    const temSelector = value.alvoCnj || value.alvoCliente || value.alvoParte;
-    const temMudanca = value.novoStatus || value.novoCliente || value.novaParte || value.novaArea;
+    const temSelector = value.alvoCnj || value.alvoNumero || value.alvoCliente || value.alvoParte;
+    const temMudanca =
+      value.novoStatus || value.novoCliente || value.novaParte || value.novaArea ||
+      value.novaFase || value.novaInstancia;
     if (!erro && !temSelector) erro = SEM_SELETOR_PROCESSO;
     else if (!erro && !temMudanca)
-      erro = 'O que você quer mudar no processo? (status, cliente, parte ou área)';
+      erro = 'O que você quer mudar no processo? (status, cliente, parte, área, fase ou instância)';
     return { value, faltando: [], erro };
   },
 };
@@ -431,7 +446,7 @@ const arquivarProcessoAcao: ActionDef = {
   },
   validate(input) {
     const { sel, erro } = parseSelectorProcesso(input);
-    const temSelector = sel.alvoCnj || sel.alvoCliente || sel.alvoParte;
+    const temSelector = sel.alvoCnj || sel.alvoNumero || sel.alvoCliente || sel.alvoParte;
     return { value: sel, faltando: [], erro: erro ?? (temSelector ? null : SEM_SELETOR_PROCESSO) };
   },
 };

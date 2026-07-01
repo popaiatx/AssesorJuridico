@@ -95,6 +95,28 @@ describe('validação das ações de edição/remoção (Passo 11)', () => {
     expect(editarP.validate({ alvo_cliente: 'Maria' }).erro).toMatch(/mudar/i);
   });
 
+  it('seletor com FRAGMENTO de número (≥4 dígitos) rebaixa em vez de rejeitar (Passo 15)', () => {
+    const r = editarP.validate({ alvo_cnj: 'processo 12345', novo_status: 'suspenso' });
+    expect(r.erro).toBeNull();
+    expect(r.value.alvoNumero).toBe('12345'); // fragmento, não CNJ
+    expect(r.value.alvoCnj).toBeUndefined();
+    // CNJ completo continua exato:
+    const cnj = editarP.validate({ alvo_cnj: '0001234-56.2024.8.26.0100', novo_status: 'x' });
+    expect(cnj.value.alvoCnj).toBe('00012345620248260100');
+    expect(cnj.value.alvoNumero).toBeUndefined();
+    // Curto demais (<4 dígitos) → erro claro:
+    expect(editarP.validate({ alvo_cnj: '12', novo_status: 'x' }).erro).toMatch(/4 dígitos/i);
+    // Fragmento também vale como seletor no arquivar:
+    expect(arquivarP.validate({ alvo_cnj: '2024.8.26' }).erro).toBeNull();
+  });
+
+  it('editar_processo aceita nova fase e nova instância (Passo 15)', () => {
+    const r = editarP.validate({ alvo_cnj: '12345', nova_fase: 'execução', nova_instancia: '2º grau' });
+    expect(r.erro).toBeNull();
+    expect(r.value.novaFase).toBe('execução');
+    expect(r.value.novaInstancia).toBe('2º grau');
+  });
+
   it('arquivar_processo: precisa de seletor', () => {
     expect(arquivarP.validate({}).erro).toMatch(/qual processo/i);
     expect(arquivarP.validate({ alvo_cnj: '0001234-56.2024.8.26.0100' }).erro).toBeNull();

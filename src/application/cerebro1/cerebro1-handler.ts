@@ -297,6 +297,7 @@ export class Cerebro1Handler implements IntentHandler {
           })).map((c) => ({ id: c.id, label: labelCompromisso(c) }))
         : (await this.deps.store.findProcessos(assinanteId, {
             numeroCnj: (value.alvoCnj as string) ?? null,
+            numeroFragmento: (value.alvoNumero as string) ?? null,
             clienteNome: (value.alvoCliente as string) ?? null,
             parte: (value.alvoParte as string) ?? null,
           })).map((p) => ({ id: p.id, label: rotuloProcesso(p) + (p.status ? ` — ${p.status}` : '') }));
@@ -409,6 +410,8 @@ export class Cerebro1Handler implements IntentHandler {
     if (typeof v.novoCliente === 'string') partes.push(`cliente: ${v.novoCliente}`);
     if (typeof v.novaParte === 'string') partes.push(`parte: ${v.novaParte}`);
     if (typeof v.novaArea === 'string') partes.push(`área: ${v.novaArea}`);
+    if (typeof v.novaFase === 'string') partes.push(`fase: ${v.novaFase}`);
+    if (typeof v.novaInstancia === 'string') partes.push(`instância: ${v.novaInstancia}`);
     return `Vou alterar o processo ${rotuloProcesso(p)} — ${partes.join('; ')}. Responda *SIM* para confirmar.`;
   }
 
@@ -450,6 +453,8 @@ export class Cerebro1Handler implements IntentHandler {
         patch.clienteId = await this.deps.store.upsertClienteByNome(assinanteId, v.novoCliente);
       if (typeof v.novaParte === 'string') patch.parteContraria = v.novaParte;
       if (typeof v.novaArea === 'string') patch.area = v.novaArea;
+      if (typeof v.novaFase === 'string') patch.fase = v.novaFase;
+      if (typeof v.novaInstancia === 'string') patch.instancia = v.novaInstancia;
       const ok = await this.deps.store.updateProcesso(assinanteId, id, patch);
       return ok ? '✅ Processo atualizado!' : 'Não encontrei mais esse processo.';
     }

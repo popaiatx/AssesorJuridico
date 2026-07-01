@@ -61,6 +61,8 @@ export interface CompromissoPatch {
 /** Seletor de processo alvo. */
 export interface ProcessoSelector {
   numeroCnj?: string | null;
+  /** Fragmento do número (≥4 dígitos, quando não é um CNJ completo) — casa por trecho. */
+  numeroFragmento?: string | null;
   clienteNome?: string | null;
   parte?: string | null;
 }
@@ -71,6 +73,8 @@ export interface ProcessoPatch {
   clienteId?: string | null;
   parteContraria?: string | null;
   area?: string | null;
+  fase?: string | null;
+  instancia?: string | null;
 }
 
 export interface NovoProcesso {

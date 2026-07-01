@@ -291,6 +291,9 @@ export async function findProcessos(
   sel: ProcessoSelector,
 ): Promise<ProcessoRow[]> {
   const cnj = sel.numeroCnj ?? null;
+  // Fragmento de número ("processo 12345"): casa por trecho do numero_cnj —
+  // dentro da MESMA query já escopada por tenant (o LIKE nunca roda fora dela).
+  const fragPattern = sel.numeroFragmento ? `%${sel.numeroFragmento}%` : null;
   const clientePattern = sel.clienteNome ? `%${sel.clienteNome}%` : null;
   const partePattern = sel.parte ? `%${sel.parte}%` : null;
   return withTenant(assinanteId, async (tx) => {
@@ -300,6 +303,7 @@ export async function findProcessos(
       left join clientes c on c.id = p.cliente_id
       where p.assinante_id = ${assinanteId}
         and (${cnj}::text is null or p.numero_cnj = ${cnj})
+        and (${fragPattern}::text is null or p.numero_cnj like ${fragPattern})
         and (${clientePattern}::text is null or c.nome ilike ${clientePattern})
         and (${partePattern}::text is null or p.parte_contraria ilike ${partePattern})
       order by p.criado_em desc
@@ -333,13 +337,17 @@ export async function updateProcesso(
   const clienteId = patch.clienteId ?? null;
   const parte = patch.parteContraria ?? null;
   const area = patch.area ?? null;
+  const fase = patch.fase ?? null;
+  const instancia = patch.instancia ?? null;
   return withTenant(assinanteId, async (tx) => {
     const rows = await tx<{ id: string }[]>`
       update processos set
         status = coalesce(${status}, status),
         cliente_id = coalesce(${clienteId}::uuid, cliente_id),
         parte_contraria = coalesce(${parte}, parte_contraria),
-        area = coalesce(${area}, area)
+        area = coalesce(${area}, area),
+        fase = coalesce(${fase}, fase),
+        instancia = coalesce(${instancia}, instancia)
       where id = ${id} and assinante_id = ${assinanteId}
       returning id
     `;
