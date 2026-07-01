@@ -12,11 +12,13 @@
  * usuário/LLM. `setResumo` também é escopado por tenant. Documento de outro dono →
  * `getById` devolve null → nada é lido nem gerado.
  */
-import { extrairTexto, type ExtracaoResultado } from '../../adapters/documentos/extractors.js';
-import { AVISO, DISCLAIMER_RESUMO } from '../../core/domain/documentos/formato.js';
-import type { DocumentoResumoStore } from '../../core/ports/documentos.js';
+import type { ExtracaoResultado } from '../../adapters/documentos/extractors.js';
+import { AVISO, DISCLAIMER_RESUMO, ehOcr, temTexto } from '../../core/domain/documentos/formato.js';
+import type { DocumentoResumoStore, ExtracaoStatus } from '../../core/ports/documentos.js';
 import type { LlmPort } from '../../core/ports/llm.js';
+import type { OcrPort } from '../../core/ports/ocr.js';
 import type { StoragePort } from '../../core/ports/storage.js';
+import { extrairComOcr, type ExtrairComOcrDeps } from './extrair-com-ocr.js';
 import { resumir } from './resumir.js';
 
 interface Logger {
@@ -43,8 +45,15 @@ export interface ResumirDocumentoDeps {
   llm: LlmPort;
   /** Extrator injetável (testes); default = extrairTexto (pdf/docx/txt). */
   extrair?: (bytes: Uint8Array, filename: string, ct: string | null) => Promise<ExtracaoResultado>;
+  /** OCR local (Passo 13): permite resumo NOVO de documento escaneado (ok_ocr). */
+  ocr?: OcrPort;
+  ocrMinConfianca?: number;
+  ocrMaxPaginas?: number;
   logger: Logger;
 }
+
+const OCR_MIN_CONFIANCA_PADRAO = 60;
+const OCR_MAX_PAGINAS_PADRAO = 3;
 
 export class ResumirDocumento implements ResumidorDocumento {
   constructor(private readonly deps: ResumirDocumentoDeps) {}
@@ -61,13 +70,14 @@ export class ResumirDocumento implements ResumidorDocumento {
     const foco = pedido.foco?.trim() ? pedido.foco.trim() : undefined;
     const modo: ModoResumo = foco ? 'novo' : (pedido.modo ?? 'guardado');
 
-    // PADRÃO: resumo guardado, instantâneo (sem nova chamada de LLM).
+    // PADRÃO: resumo guardado, instantâneo (sem nova chamada de LLM). Se veio de OCR,
+    // o aviso reflete isso (transparência).
     if (modo === 'guardado' && row.resumo && row.resumo.trim()) {
-      return comAviso(row.resumo.trim());
+      return comAviso(row.resumo.trim(), row.extracaoStatus);
     }
 
-    // Documento sem texto (escaneado/imagem) → não há como resumir.
-    if (row.extracaoStatus !== 'ok') return AVISO.semTextoResumo;
+    // Documento sem texto (nem nativo nem OCR) → não há como resumir.
+    if (!temTexto(row.extracaoStatus)) return AVISO.semTextoResumo;
 
     // Precisa gerar: RELÊ do Storage SÓ com a posse confirmada (row veio do getById).
     let bytes: Uint8Array;
@@ -77,8 +87,9 @@ export class ResumirDocumento implements ResumidorDocumento {
       this.deps.logger.error({ err, docId }, 'resumo 12C: falha ao reler do Storage');
       return AVISO.falhaRelerResumo;
     }
-    const ex = await (this.deps.extrair ?? extrairTexto)(bytes, row.nome, row.tipo);
-    if (ex.status !== 'ok') return AVISO.semTextoResumo;
+    // Re-extração com OCR (doc escaneado ok_ocr volta a render texto ao reler).
+    const ex = await extrairComOcr(bytes, row.nome, row.tipo, this.ocrDeps());
+    if (!temTexto(ex.status)) return AVISO.semTextoResumo;
 
     const resumo = await resumir(this.deps.llm, ex.texto, foco);
 
@@ -86,10 +97,21 @@ export class ResumirDocumento implements ResumidorDocumento {
     if (modo === 'guardado') {
       await this.deps.store.setResumo(assinanteId, docId, resumo).catch(() => {});
     }
-    return comAviso(resumo);
+    return comAviso(resumo, ex.status);
+  }
+
+  private ocrDeps(): ExtrairComOcrDeps {
+    return {
+      ...(this.deps.extrair ? { extrair: this.deps.extrair } : {}),
+      ...(this.deps.ocr ? { ocr: this.deps.ocr } : {}),
+      ocrMinConfianca: this.deps.ocrMinConfianca ?? OCR_MIN_CONFIANCA_PADRAO,
+      ocrMaxPaginas: this.deps.ocrMaxPaginas ?? OCR_MAX_PAGINAS_PADRAO,
+      logger: this.deps.logger,
+    };
   }
 }
 
-function comAviso(resumo: string): string {
-  return `${resumo}\n\n${DISCLAIMER_RESUMO}`;
+function comAviso(resumo: string, status: ExtracaoStatus): string {
+  const nota = ehOcr(status) ? `\n\n${AVISO.ocrConfira}` : '';
+  return `${resumo}\n\n${DISCLAIMER_RESUMO}${nota}`;
 }

@@ -10,6 +10,7 @@
  * antes de reler o arquivo do Storage. A lista da última busca (para "o segundo")
  * vem da MEMÓRIA do próprio assinante — e cada id ainda passa por getById ao usar.
  */
+import { marcaOcr } from '../../core/domain/documentos/formato.js';
 import { interpretarPedido, type AlvoResumo } from '../../core/domain/documentos/pedido-resumo.js';
 import { ultimaListaDocumentos } from '../../core/domain/conversation/memory.js';
 import type { DocumentoResultado } from '../../core/ports/documentos.js';
@@ -43,7 +44,8 @@ function descreve(d: DocumentoResultado): string {
   const partes = c?.partes?.filter((p) => p.trim() !== '') ?? [];
   if (partes.length) detalhes.push(partes.slice(0, 3).join(', '));
   const sufixo = detalhes.length ? ` — ${detalhes.join(' · ')}` : '';
-  return `*${d.nome}*${sufixo}`;
+  const marca = marcaOcr(d.extracaoStatus); // transparência: conteúdo veio de OCR
+  return `*${d.nome}*${sufixo}${marca ? ` _(${marca})_` : ''}`;
 }
 
 export class DocumentSearchHandler implements IntentHandler {

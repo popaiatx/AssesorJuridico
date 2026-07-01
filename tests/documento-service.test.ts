@@ -10,6 +10,7 @@ import type {
 } from '../src/core/ports/documentos';
 import type { EmbeddingsPort } from '../src/core/ports/embeddings';
 import type { LlmGenerateParams, LlmGenerateResult, LlmPort } from '../src/core/ports/llm';
+import type { OcrPort, OcrResultado } from '../src/core/ports/ocr';
 import type { PutDocumentInput, StoragePort } from '../src/core/ports/storage';
 
 // --- Fakes ---
@@ -105,13 +106,25 @@ class FakeEmbeddings implements EmbeddingsPort {
 const extOk = (): Promise<ExtracaoResultado> => Promise.resolve({ texto: 'Contrato de locação entre Maria e Empresa X. Valor mensal...', status: 'ok', formato: 'pdf' });
 const extSemTexto = (): Promise<ExtracaoResultado> => Promise.resolve({ texto: '', status: 'sem_texto', formato: 'imagem', aviso: 'imagem; OCR em breve' });
 
-function build(opts: { ext?: () => Promise<ExtracaoResultado>; processos?: Record<string, string>; embeddings?: EmbeddingsPort } = {}) {
+// OCR fake: registra chamadas e devolve um resultado configurável.
+class FakeOcr implements OcrPort {
+  calls = 0;
+  constructor(private readonly res: OcrResultado) {}
+  reconhecer(): Promise<OcrResultado> {
+    this.calls++;
+    return Promise.resolve(this.res);
+  }
+}
+const ocrBom: OcrResultado = { texto: 'CONTRATO DE LOCACAO entre Joao e Maria, protocolo 5551, valor R$ 2.000,00.', confianca: 90, paginas: 1, paginasLidas: 1 };
+
+function build(opts: { ext?: () => Promise<ExtracaoResultado>; processos?: Record<string, string>; embeddings?: EmbeddingsPort; ocr?: OcrPort } = {}) {
   const storage = new FakeStorage();
   const store = new FakeStore();
   let seq = 0;
   const service = new DocumentoService({
     storage, store, llm: new FakeLlm(),
     ...(opts.embeddings ? { embeddings: opts.embeddings } : {}),
+    ...(opts.ocr ? { ocr: opts.ocr, ocrMinConfianca: 60, ocrMaxPaginas: 3 } : {}),
     resolveProcessoId: (_a, cnj) => Promise.resolve(opts.processos?.[cnj] ?? null),
     extrair: opts.ext ?? extOk,
     novoId: () => `doc${++seq}`,
@@ -303,5 +316,71 @@ describe('DocumentoService — ISOLAMENTO do arquivo (2 assinantes)', () => {
     // (c) A apaga 0 documentos de B
     expect(await store.remover('A', bDocId)).toBeNull();
     expect(store.data.get('B')).toHaveLength(1);
+  });
+});
+
+describe('DocumentoService — OCR (Passo 13)', () => {
+  it('salvar imagem sem texto nativo + OCR bom → ok_ocr, gera chaves, avisa OCR', async () => {
+    const { service, store } = build({ ext: extSemTexto, ocr: new FakeOcr(ocrBom) });
+    const r = await service.processarComAcao('A', entrada({ filename: 'scan.png', contentType: 'image/png' }), 'salvar');
+    const d = store.data.get('A')![0]!;
+    expect(d.extracaoStatus).toBe('ok_ocr');
+    expect(d.chaves).not.toBeNull(); // extraiu chaves do texto do OCR
+    expect(d.buscaTexto).toBeTruthy(); // entra na busca por conteúdo
+    expect(r.toLowerCase()).toContain('ocr'); // transparência ao guardar
+  });
+
+  it('OCR de baixa confiança → permanece sem_texto, sem chaves (não inventa)', async () => {
+    const { service, store } = build({ ext: extSemTexto, ocr: new FakeOcr({ ...ocrBom, confianca: 30 }) });
+    const r = await service.processarComAcao('A', entrada({ filename: 'ruim.png', contentType: 'image/png' }), 'salvar');
+    const d = store.data.get('A')![0]!;
+    expect(d.extracaoStatus).toBe('sem_texto');
+    expect(d.chaves).toBeNull();
+    expect(r.toLowerCase()).toContain('não poderá ser encontrado por conteúdo');
+  });
+
+  it('reprocessarOcr: sem_texto → ok_ocr (idempotente); e isolado por tenant', async () => {
+    const storage = new FakeStorage();
+    const store = new FakeStore();
+    let seq = 0;
+    const mk = (ocr?: OcrPort) =>
+      new DocumentoService({
+        storage, store, llm: new FakeLlm(),
+        ...(ocr ? { ocr, ocrMinConfianca: 60, ocrMaxPaginas: 3 } : {}),
+        resolveProcessoId: () => Promise.resolve(null),
+        extrair: extSemTexto,
+        novoId: () => `doc${++seq}`,
+        logger: { error: () => {} },
+      });
+    // A guarda um escaneado SEM OCR → fica sem_texto
+    await mk().processarComAcao('A', entrada({ filename: 'scan.png', contentType: 'image/png' }), 'salvar');
+    const id = store.data.get('A')![0]!.id;
+    expect(store.data.get('A')![0]!.extracaoStatus).toBe('sem_texto');
+
+    const ocr = new FakeOcr(ocrBom);
+    const comOcr = mk(ocr);
+
+    // (isolamento) B tenta reprocessar o doc de A → barrado, Storage NUNCA lido
+    storage.getCalls = [];
+    const rB = await comOcr.reprocessarOcr('B', id);
+    expect(rB.ok).toBe(false);
+    expect(rB.status).toBe('nao_encontrado');
+    expect(storage.getCalls).toHaveLength(0);
+    expect(ocr.calls).toBe(0);
+
+    // A reprocessa o próprio → vira ok_ocr com chaves
+    const rA = await comOcr.reprocessarOcr('A', id);
+    expect(rA.ok).toBe(true);
+    expect(rA.status).toBe('ok_ocr');
+    const d = store.data.get('A')![0]!;
+    expect(d.extracaoStatus).toBe('ok_ocr');
+    expect(d.chaves).not.toBeNull();
+
+    // idempotente: rodar de novo não reprocessa (já tem texto)
+    const chamadasAntes = ocr.calls;
+    const rDeNovo = await comOcr.reprocessarOcr('A', id);
+    expect(rDeNovo.ok).toBe(false);
+    expect(rDeNovo.status).toBe('ja_tem_texto');
+    expect(ocr.calls).toBe(chamadasAntes); // não chamou OCR de novo
   });
 });

@@ -11,16 +11,21 @@
  *    busca por conteúdo (marca `sem_texto`). Nunca inventa chaves.
  */
 import { randomUUID } from 'node:crypto';
-import { extrairTexto, type ExtracaoResultado } from '../../adapters/documentos/extractors.js';
-import { AVISO, DISCLAIMER_RESUMO } from '../../core/domain/documentos/formato.js';
+import type { ExtracaoResultado } from '../../adapters/documentos/extractors.js';
+import { AVISO, DISCLAIMER_RESUMO, ehOcr, temTexto } from '../../core/domain/documentos/formato.js';
 import type { DocAcao } from '../../core/domain/documentos/decisao.js';
 import { PERGUNTA_DECISAO } from '../../core/domain/documentos/decisao.js';
 import type { DocumentoStore } from '../../core/ports/documentos.js';
 import type { EmbeddingsPort } from '../../core/ports/embeddings.js';
 import type { LlmPort } from '../../core/ports/llm.js';
+import type { OcrPort } from '../../core/ports/ocr.js';
 import type { StoragePort } from '../../core/ports/storage.js';
 import { buscaTextoDe, extrairChaves } from './extrair-chaves.js';
+import { extrairComOcr, type ExtrairComOcrDeps } from './extrair-com-ocr.js';
 import { resumir } from './resumir.js';
+
+const OCR_MIN_CONFIANCA_PADRAO = 60;
+const OCR_MAX_PAGINAS_PADRAO = 3;
 
 const DISCLAIMER = DISCLAIMER_RESUMO;
 
@@ -47,6 +52,11 @@ export interface DocumentoServiceDeps {
   /** Tamanho máximo aceito por documento (bytes). Acima disso, recusa com aviso
    *  ANTES de subir/extrair. Ausente → sem limite na aplicação. */
   maxBytes?: number;
+  /** OCR local (Passo 13) — 2ª tentativa quando a extração nativa falha (imagem/PDF
+   *  escaneado). Ausente → escaneado continua `sem_texto`, como antes. */
+  ocr?: OcrPort;
+  ocrMinConfianca?: number;
+  ocrMaxPaginas?: number;
   resolveProcessoId: (assinanteId: string, numeroCnj: string) => Promise<string | null>;
   extrair?: (bytes: Uint8Array, filename: string, ct: string | null) => Promise<ExtracaoResultado>;
   novoId?: () => string;
@@ -64,8 +74,24 @@ function sanitize(nome: string): string {
 export class DocumentoService {
   constructor(private readonly deps: DocumentoServiceDeps) {}
 
-  private extrair(e: DocumentoEntrada): Promise<ExtracaoResultado> {
-    return (this.deps.extrair ?? extrairTexto)(e.bytes, e.filename, e.contentType);
+  private extrair(e: DocumentoEntrada, maxPaginas?: number): Promise<ExtracaoResultado> {
+    return extrairComOcr(e.bytes, e.filename, e.contentType, this.ocrDeps(maxPaginas));
+  }
+
+  /** Deps para a extração com OCR (2ª tentativa). Espalha opcionais só quando há. */
+  private ocrDeps(maxPaginas?: number): ExtrairComOcrDeps {
+    return {
+      ...(this.deps.extrair ? { extrair: this.deps.extrair } : {}),
+      ...(this.deps.ocr ? { ocr: this.deps.ocr } : {}),
+      ocrMinConfianca: this.deps.ocrMinConfianca ?? OCR_MIN_CONFIANCA_PADRAO,
+      ocrMaxPaginas: maxPaginas ?? this.deps.ocrMaxPaginas ?? OCR_MAX_PAGINAS_PADRAO,
+      logger: this.deps.logger,
+    };
+  }
+
+  /** Nota de OCR (transparência) quando o texto veio de OCR; senão ''. */
+  private notaOcr(ex: ExtracaoResultado): string {
+    return ehOcr(ex.status) && ex.aviso ? `\n\n${ex.aviso}` : '';
   }
 
   /** Retorna aviso se o arquivo excede o limite; null se estiver ok. */
@@ -100,9 +126,9 @@ export class DocumentoService {
     const ex = await this.extrair(entrada);
 
     if (acao === 'resumir') {
-      if (ex.status !== 'ok') return ex.aviso ?? AVISO.falha; // não dá p/ resumir; nada guardado
+      if (!temTexto(ex.status)) return ex.aviso ?? AVISO.falha; // não dá p/ resumir; nada guardado
       const resumo = await resumir(this.deps.llm, ex.texto);
-      return `${resumo}\n\n${DISCLAIMER}\n\n(Não guardei no acervo — você pediu só o resumo. Para guardar, é só pedir "salvar".)`;
+      return `${resumo}\n\n${DISCLAIMER}${this.notaOcr(ex)}\n\n(Não guardei no acervo — você pediu só o resumo. Para guardar, é só pedir "salvar".)`;
     }
 
     // salvar | ambos → persiste o arquivo + extrai chaves (sempre que dá)
@@ -169,11 +195,11 @@ export class DocumentoService {
 
     if (acao === 'resumir') {
       // Só resumir: mostra e NÃO guarda (apaga o staging).
-      const resumo = ex.status === 'ok' ? await resumir(this.deps.llm, ex.texto) : null;
+      const resumo = temTexto(ex.status) ? await resumir(this.deps.llm, ex.texto) : null;
       const ref = await this.deps.store.remover(assinanteId, docId);
       if (ref) await this.deps.storage.deleteDocument(ref).catch(() => {});
       return resumo
-        ? `${resumo}\n\n${DISCLAIMER}\n\n(Não guardei no acervo — você pediu só o resumo.)`
+        ? `${resumo}\n\n${DISCLAIMER}${this.notaOcr(ex)}\n\n(Não guardei no acervo — você pediu só o resumo.)`
         : `${ex.aviso ?? AVISO.falha}\n\n(Não guardei no acervo.)`;
     }
     // salvar | ambos: promove o staging a guardado (com ou sem chaves)
@@ -188,7 +214,7 @@ export class DocumentoService {
     acao: DocAcao,
     avisoProc: string,
   ): Promise<string> {
-    if (ex.status !== 'ok') {
+    if (!temTexto(ex.status)) {
       await this.deps.store.gravarConteudo(assinanteId, docId, {
         chaves: null,
         resumo: null,
@@ -205,13 +231,48 @@ export class DocumentoService {
     await this.deps.store.gravarConteudo(assinanteId, docId, {
       chaves,
       resumo,
-      extracaoStatus: 'ok',
+      extracaoStatus: ex.status, // 'ok' | 'ok_ocr' | 'ok_ocr_parcial'
       buscaTexto,
       embedding,
     });
     const tipo = chaves.tipo ? ` (${chaves.tipo})` : '';
     const guardei = `📎 Guardei no seu acervo${tipo}${avisoProc}.`;
-    return resumo ? `${resumo}\n\n${DISCLAIMER}\n\n${guardei}` : guardei;
+    const corpo = resumo ? `${resumo}\n\n${DISCLAIMER}\n\n${guardei}` : guardei;
+    return corpo + this.notaOcr(ex); // transparência: avisa quando o texto veio de OCR
+  }
+
+  /**
+   * Re-OCR de um documento `sem_texto` já guardado (Passo 13; usado pela CLI doc:ocr).
+   * Idempotente: só reprocessa quem ainda não tem texto. Isolamento: getById confirma
+   * a posse por tenant ANTES de baixar do Storage (nunca toca arquivo de outro dono).
+   * `maxPaginas` pode ser maior aqui (offline não trava a conversa).
+   */
+  async reprocessarOcr(
+    assinanteId: string,
+    docId: string,
+    maxPaginas?: number,
+  ): Promise<{ ok: boolean; status: string; mensagem: string }> {
+    const row = await this.deps.store.getById(assinanteId, docId); // RLS: só o dono
+    if (!row) return { ok: false, status: 'nao_encontrado', mensagem: 'documento não encontrado' };
+    if (temTexto(row.extracaoStatus)) {
+      return { ok: false, status: 'ja_tem_texto', mensagem: 'já tinha texto (pulado)' };
+    }
+    if (!this.deps.ocr) return { ok: false, status: 'ocr_off', mensagem: 'OCR desabilitado' };
+
+    let bytes: Uint8Array;
+    try {
+      bytes = await this.deps.storage.getDocument(row.storageRef);
+    } catch (err) {
+      this.deps.logger.error({ err, docId }, 're-OCR: falha ao baixar do Storage');
+      return { ok: false, status: 'falha_download', mensagem: 'falha ao baixar o arquivo' };
+    }
+    const ex = await extrairComOcr(bytes, row.nome, row.tipo, this.ocrDeps(maxPaginas));
+    if (!temTexto(ex.status)) {
+      return { ok: false, status: 'sem_texto', mensagem: ex.aviso ?? 'segue sem texto legível' };
+    }
+    // Reaproveita o pipeline normal (chaves + resumo + embedding), persistindo o status OCR.
+    await this.finalizarGuarda(assinanteId, docId, ex, 'ambos', '');
+    return { ok: true, status: ex.status, mensagem: `OCR aplicado (${ex.status})` };
   }
 
   /** Embedding do busca_texto p/ a busca semântica (12B). Falha NÃO perde o

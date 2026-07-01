@@ -66,6 +66,8 @@ import {
   setResumoDocumento,
 } from '../db/documentos-store.js';
 import { getEmbeddingsConfig } from '../../adapters/embeddings/config.js';
+import { getOcrConfig } from '../../adapters/ocr/config.js';
+import { createOcrAdapter } from '../../adapters/ocr/factory.js';
 import { createEmbeddingsAdapter } from '../../adapters/embeddings/factory.js';
 import { getWhatsappConfig } from '../../adapters/whatsapp/config.js';
 import { CloudApiClient } from '../../adapters/whatsapp/cloud-api-client.js';
@@ -161,11 +163,17 @@ function registerWhatsapp(app: FastifyInstance): void {
         pendenteDecisao: documentoPendenteDecisao,
         remover: removerDocumento,
       };
+      // OCR local (Passo 13): 2ª tentativa p/ escaneado/imagem. Só se OCR_ENABLED.
+      const ocrCfg = getOcrConfig();
+      const ocr = ocrCfg ? createOcrAdapter(ocrCfg) : null;
       const docService = new DocumentoService({
         storage: supabaseStorage,
         store: docStore,
         llm,
         ...(embeddings ? { embeddings } : {}),
+        ...(ocr && ocrCfg
+          ? { ocr, ocrMinConfianca: ocrCfg.minConfianca, ocrMaxPaginas: ocrCfg.maxPaginas }
+          : {}),
         maxBytes: config.DOCUMENTOS_MAX_MB * 1024 * 1024,
         resolveProcessoId: resolveProcessoIdByCnj,
         logger: app.log,
@@ -207,6 +215,9 @@ function registerWhatsapp(app: FastifyInstance): void {
         store: { getById: getDocumentoById, setResumo: setResumoDocumento },
         storage: supabaseStorage,
         llm,
+        ...(ocr && ocrCfg
+          ? { ocr, ocrMinConfianca: ocrCfg.minConfianca, ocrMaxPaginas: ocrCfg.maxPaginas }
+          : {}),
         logger: app.log,
       });
       overrides.documento = new DocumentSearchHandler({
@@ -216,7 +227,8 @@ function registerWhatsapp(app: FastifyInstance): void {
         urlTtlSec: config.DOCUMENTOS_URL_TTL_SEC,
       });
       app.log.info(
-        `Documentos: busca (12B) ${embeddings ? 'exata + semântica' : 'só exata'} + resumo (12C) ativos`,
+        `Documentos: busca (12B) ${embeddings ? 'exata + semântica' : 'só exata'} + resumo (12C)` +
+          ` + OCR (13) ${ocr ? `ativo (${ocrCfg?.idioma})` : 'desligado'}`,
       );
     } else {
       app.log.warn('SUPABASE_SERVICE_ROLE_KEY ausente — documentos (12A) inativos (placeholder)');
