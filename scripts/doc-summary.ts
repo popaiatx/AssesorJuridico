@@ -47,10 +47,15 @@ const { requireLlmConfig } = await import('../src/adapters/llm/config.js');
 const { createLlmAdapter } = await import('../src/adapters/llm/factory.js');
 const { getEmbeddingsConfig } = await import('../src/adapters/embeddings/config.js');
 const { createEmbeddingsAdapter } = await import('../src/adapters/embeddings/factory.js');
+const { getOcrConfig } = await import('../src/adapters/ocr/config.js');
+const { createOcrAdapter } = await import('../src/adapters/ocr/factory.js');
 const { BuscarDocumentos } = await import('../src/application/documentos/buscar-documentos.js');
 const { ResumirDocumento } = await import('../src/application/documentos/resumir-documento.js');
 const { config } = await import('../src/infra/config/index.js');
 const { closeDatabase } = await import('../src/infra/db/tenant.js');
+
+const ocrCfg = getOcrConfig();
+const ocr = ocrCfg ? createOcrAdapter(ocrCfg) : null;
 
 try {
   const assinanteId = await resolveAssinanteByPhone(telefone);
@@ -74,6 +79,7 @@ try {
       store: { getById: docsStore.getDocumentoById, setResumo: docsStore.setResumoDocumento },
       storage: supabaseStorage,
       llm: createLlmAdapter(requireLlmConfig()),
+      ...(ocr && ocrCfg ? { ocr, ocrMinConfianca: ocrCfg.minConfianca, ocrMaxPaginas: ocrCfg.maxPaginas } : {}),
       logger: { error: (o, m) => console.error('[resumo][erro]', m ?? '', o) },
     });
 
@@ -96,5 +102,6 @@ try {
   console.error('Falha ao resumir:', err instanceof Error ? err.message : err);
   process.exitCode = 1;
 } finally {
+  if (ocr) await ocr.terminar().catch(() => {});
   await closeDatabase().catch(() => {});
 }

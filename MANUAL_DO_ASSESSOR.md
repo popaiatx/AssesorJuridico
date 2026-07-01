@@ -82,7 +82,7 @@ datas, assunto) para você **encontrar o documento depois**.
 - Você manda um PDF com a legenda *"resume isso"* → ele responde com o resumo.
 - Você manda um arquivo **sem dizer nada** → ele pergunta: *"O que você quer fazer? 1 - Resumir / 2 - Salvar / 3 - Resumir e salvar"* e age conforme a sua resposta.
 - Você manda um contrato com *"guarda no processo 0001234-…"* → ele guarda vinculado ao processo.
-- Se for **foto ou PDF escaneado** (sem texto), ele avisa com honestidade: guarda o arquivo, mas diz que **não conseguiu ler o conteúdo** — então esse documento **não poderá ser achado por conteúdo** depois (só por nome/data). Ele nunca "inventa" o que não leu.
+- Se for **foto ou PDF escaneado**, ele agora **lê o texto por reconhecimento de imagem (OCR)** — tudo **dentro do nosso ambiente** (o documento não é enviado a terceiros). Assim ele consegue resumir e indexar até um documento escaneado. Como OCR pode errar (sobretudo números), ele **avisa** que aquele conteúdo veio de OCR e pede conferência. Se a imagem estiver ruim demais para ler com segurança, ele é honesto: guarda o arquivo, avisa que só leu parcialmente e **não registra dados incertos** (melhor vazio que errado).
 
 **Bom saber:**
 - **Tipos que ele lê:** PDF com texto, Word (.docx) e texto (.txt). Outros tipos ele
@@ -142,8 +142,6 @@ assessor dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pessoa
 ## Parte 3 — O que ele ainda NÃO faz (e o que vem por aí)
 
 - **Entender áudios** (mensagem de voz) — *(planejado, deixado para o final)*
-- **Ler documentos escaneados/fotos** (OCR) — hoje ele avisa quando não consegue ler;
-  esses arquivos ficam fora da busca por conteúdo.
 - **Ler imagens / PDF escaneado** (OCR) — hoje ele avisa que não consegue; *(planejado)*.
 - **Jurisprudência** (decisões de tribunais, súmulas) no acervo de consulta — hoje só
   legislação; jurisprudência virá por um provedor especializado. *(em breve)*
@@ -190,7 +188,7 @@ modelo de mensagem junto à Meta).
 - ✓ **Receber, ler e resumir documentos (PDF/Word/texto)** — extrair o essencial e guardar com informações-chave.
 - ✓ **Encontrar documentos por conteúdo** (busca) — achar por número/nome/trecho ou por assunto, sem lembrar o nome do arquivo.
 - ✓ **Resumir um documento guardado** — pedir o resumo de um documento do acervo (por "o segundo", nome/número ou com um foco), sem reenviar o arquivo.
-- ▶ **OCR (ler imagens / PDF escaneado)** — hoje avisa que não consegue.
+- ✓ **OCR (ler imagens / PDF escaneado)** — lê o texto de escaneados/fotos localmente e marca "lido por OCR" (a conferir).
 - ▶ **Sugerir prazo a partir de uma intimação** — da leitura à agenda, automático.
 - ▶ **Rascunho de peças** (com revisão obrigatória, sem citar o que não foi verificado) — acelerar a redação.
 - 💡 **Modelos de petições/contratos** preenchidos com os dados do caso — produtividade.
@@ -232,6 +230,7 @@ modelo de mensagem junto à Meta).
 | Receber/ler/resumir/guardar documentos (PDF/Word/texto) | ✅ Sim | Recebimento pelo Zap depende do chip | Guarda com informações-chave; PDF-imagem avisa que não leu |
 | Encontrar documentos por conteúdo (busca) | ✅ Sim | Para uso real, sim | Por número/nome/trecho ou por assunto; só os seus; validável internamente |
 | Resumir um documento guardado | ✅ Sim | Para uso real, sim | Resumo salvo (na hora) ou novo com foco; só os seus; validável internamente |
+| Ler escaneados/fotos por OCR (local) | ✅ Sim | Para uso real, sim | Documento não sai do ambiente; marca "lido por OCR"; baixa qualidade não é indexada |
 | Entender áudios | ❌ Ainda não | — | Planejado (por último) |
 | Jurisprudência (decisões/súmulas) | ❌ Ainda não | — | Em breve (provedor especializado) |
 | Andamento processual (tribunais) | ❌ Ainda não | — | Planejado |

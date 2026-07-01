@@ -58,9 +58,14 @@ const { requireLlmConfig } = await import('../src/adapters/llm/config.js');
 const { createLlmAdapter } = await import('../src/adapters/llm/factory.js');
 const { getEmbeddingsConfig } = await import('../src/adapters/embeddings/config.js');
 const { createEmbeddingsAdapter } = await import('../src/adapters/embeddings/factory.js');
+const { getOcrConfig } = await import('../src/adapters/ocr/config.js');
+const { createOcrAdapter } = await import('../src/adapters/ocr/factory.js');
 const { DocumentoService } = await import('../src/application/documentos/documento-service.js');
 const { config } = await import('../src/infra/config/index.js');
 const { closeDatabase } = await import('../src/infra/db/tenant.js');
+
+const ocrCfg = getOcrConfig();
+const ocr = ocrCfg ? createOcrAdapter(ocrCfg) : null;
 
 try {
   const assinanteId = await resolveAssinanteByPhone(telefone!);
@@ -80,6 +85,7 @@ try {
       },
       llm: createLlmAdapter(requireLlmConfig()),
       ...(embCfg ? { embeddings: createEmbeddingsAdapter(embCfg) } : {}),
+      ...(ocr && ocrCfg ? { ocr, ocrMinConfianca: ocrCfg.minConfianca, ocrMaxPaginas: ocrCfg.maxPaginas } : {}),
       maxBytes: config.DOCUMENTOS_MAX_MB * 1024 * 1024,
       resolveProcessoId: resolveProcessoIdByCnj,
       logger: { error: (o, m) => console.error('[doc][erro]', m ?? '', o) },
@@ -104,5 +110,6 @@ try {
   console.error('Falha ao processar documento:', err instanceof Error ? err.message : err);
   process.exitCode = 1;
 } finally {
+  if (ocr) await ocr.terminar().catch(() => {}); // encerra o worker de OCR (senão trava a saída)
   await closeDatabase().catch(() => {});
 }

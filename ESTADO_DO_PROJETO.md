@@ -33,7 +33,10 @@
   + `doc:search`). Concluído também o **Passo 12C — resumir documento guardado**
   (resumo salvo instantâneo ou novo relendo o Storage com foco; referência por ordinal
   da última busca/nome/número/contexto; isolamento re-verificado por tenant antes da
-  releitura; validável pela CLI `doc:summary`). Falta **agendar os Crons no Railway** (sync semanal + lembretes 15
+  releitura; validável pela CLI `doc:summary`). Concluído também o **Passo 13 — OCR
+  local** (PDF escaneado/foto lidos por OCR dentro do ambiente — documento nunca sai;
+  vira `ok_ocr`/`ok_ocr_parcial` e sai do ponto cego; baixa confiança não indexa;
+  transparência "lido por OCR"; validável por `doc:process`/`doc:ocr`). Falta **agendar os Crons no Railway** (sync semanal + lembretes 15
   min), **aprovar o template `lembrete_generico` na Meta**, **criar o bucket
   `documentos`** e **validar pelo WhatsApp** (download de mídia, chip).
   Próximo: **jurisprudência** ou **Cérebro 3 (tribunais)**.
@@ -208,6 +211,23 @@
   ponta** (Supabase real, 2 assinantes): resumo guardado sem LLM; gera+persiste
   (peticao passou de sem-resumo → com-resumo); foco; `sem_texto`; e **A resumindo doc
   de B por id → barrado, `storage.getDocument` NUNCA chamado (0)**. **306 testes verdes.**
+- **Passo 13 — OCR local (PDF escaneado / foto).** Stack 100% WASM/prebuilt (sem
+  dependência de sistema; roda no Railway com Nixpacks padrão): `tesseract.js` (OCR) +
+  `@hyzyla/pdfium` (rasteriza PDF→PNG) + `sharp`. Modelo `por` **vendorizado**
+  (`vendor/tessdata/por.traineddata.gz`) + core/worker locais → **sem CDN em runtime**
+  (sigilo). `OcrPort` provider-agnostic; `TesseractOcr` com worker singleton + fila
+  serializada (memória previsível). Encaixe como **2ª tentativa** (`extrairComOcr`):
+  extração nativa falhou + imagem/pdf → OCR; política pura `avaliarOcr` decide
+  **`ok_ocr`** (confiança ≥ limiar), **`ok_ocr_parcial`** (leu < total de páginas) ou
+  **`sem_texto`** (baixa confiança → NÃO indexa; melhor vazio que número errado). Status
+  novos SEM migração (`text`; helper `temTexto`/`ehOcr`). Transparência: aviso ao
+  guardar, marca na busca e nota no resumo ("🔎 lido por OCR — confira"). Teto síncrono
+  `OCR_MAX_PAGINAS` (3) com aviso "li N de M"; **re-OCR offline** `doc:ocr` (idempotente,
+  lê mais páginas, escopado por tenant — `getById` antes de baixar). Config OCR_*.
+  Validado **ponta a ponta** (Supabase real, 2 assinantes): escaneado/foto → `ok_ocr`,
+  entram na busca; 5 páginas → `ok_ocr_parcial` (3/5); ilegível → `sem_texto` sem chaves;
+  `doc:ocr` rescata legível e é idempotente; isolamento (A não faz OCR de doc de B).
+  **320 testes verdes. Railway: OCR usa ~150–300MB de pico → container ≥1GB.**
 - **Fix Node 20 / WebSocket.** O `@supabase/supabase-js` construía um RealtimeClient
   que exigia WebSocket nativo (só no Node 22+), quebrando todos os scripts de banco
   no Node 20. `admin.ts` passou a desligar o Realtime (transport no-op) — roda no
@@ -313,11 +333,12 @@
 - **Validar em produção** (acumulado): Cérebro 1, pagamento sandbox (6B), RAG.
 - **Onboarding — verificação real da inscrição na OAB** contra fonte externa
   (removida do fluxo obrigatório; pode virar opção futura).
-- **Documentos:** **busca (12B) e resumo (12C) — FEITOS e validados de ponta a ponta**
-  (`doc:doctor` → `doc:bucket` → `doc:process` → `doc:reindex` → `doc:search` →
-  `doc:summary`). O **bucket** se cria com `npm run doc:bucket` (já criado no projeto
-  atual). PENDENTE: **OCR** de imagem/PDF escaneado (ponto cego da busca e do resumo);
-  **download de mídia pelo WhatsApp** (código pronto, valida com o chip).
+- **Documentos:** **busca (12B), resumo (12C) e OCR (13) — FEITOS e validados de ponta
+  a ponta** (`doc:doctor` → `doc:bucket` → `doc:process` → `doc:reindex` → `doc:search`
+  → `doc:summary` → `doc:ocr`). O **bucket** se cria com `npm run doc:bucket`. PENDENTE:
+  **download de mídia pelo WhatsApp** (código pronto, valida com o chip); OCR de línguas
+  além de `por` (basta vendorizar outro modelo); worker de OCR em background p/ PDFs
+  enormes em tempo real (hoje: teto de páginas síncrono + `doc:ocr` offline).
 - **WhatsApp:** **download de mídia** (mídia recebida hoje → placeholder até o chip);
   template aprovado na Meta.
 - **Fila durável do webhook** (ack rápido + worker) — caminho de escala.
@@ -338,7 +359,7 @@
    na Meta**, **criar o bucket `documentos`** e **validar pelo WhatsApp** (memória, C1,
    RAG, lembrete, documentos) quando houver chip; pagamento sandbox (6B).
 2. **Jurisprudência — agregador pago** ou **Cérebro 3 (tribunais)**.
-3. Financeiro (honorários/custos); **OCR** de documentos (fecha o ponto cego da busca).
+3. Financeiro (honorários/custos).
 
 ## Como rodar
 

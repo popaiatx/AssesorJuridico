@@ -45,6 +45,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | **Documentos (12A)** | Recebe arquivo, decide (resumir/salvar/ambos), lê o texto e guarda com informações-chave (para achar depois); bucket privado isolado por tenant. |
 | **Busca de documentos (12B)** | Acha um documento guardado por referência exata (número/nome/trecho) ou vaga (assunto), combinando busca textual + semântica; só do próprio assinante; devolve link assinado. |
 | **Resumir documento guardado (12C)** | Devolve o resumo de um documento do acervo (por ordinal da última busca, nome/número ou contexto): resumo salvo (instantâneo) ou novo relendo o Storage; isolado por tenant também na releitura. |
+| **OCR local (13)** | PDF escaneado/foto: extrai o texto por OCR LOCAL (documento nunca sai), tirando-o do ponto cego (ganha chaves/resumo/busca); marca "lido por OCR"; baixa confiança não indexa. |
 
 ---
 
@@ -128,6 +129,15 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Testar — automatizado:** `tests/pedido-resumo.test.ts` (parser) e `tests/resumir-documento.test.ts` + casos no `tests/buscar-documentos.test.ts` (ordinal, desambiguação, foco, **isolamento A×B com asserção de que o Storage de B nunca é lido**).
 - **Testar — manual SEM chip (CLI):** `npm run doc:summary -- --telefone <tel> "<referência>" [--modo guardado|novo] [--foco "..."]`.
 
+### 12. OCR local — PDF escaneado / foto (13)
+- **Faz:** quando a extração nativa falha (escaneado/imagem), tenta **OCR local** (2ª tentativa) e, se o texto sai confiável, o documento vira **`ok_ocr`** e segue o fluxo normal (chaves/resumo/embedding) — sai do ponto cego e passa a ser achável. Baixa confiança → **não indexa** (não inventa), avisa "li parcialmente". PDF grande → lê as primeiras `OCR_MAX_PAGINAS` (default 3) e marca **`ok_ocr_parcial`** ("li N de M"). Transparência: guardado/busca/resumo marcam "🔎 lido por OCR — confira". Documento **nunca sai do ambiente** (tesseract.js WASM; modelo vendorizado; sem CDN).
+- **Arquivos:** `src/core/ports/ocr.ts`, `src/adapters/ocr/` (tesseract-ocr + config + factory), `src/core/domain/documentos/ocr-policy.ts` (confiança, pura), `src/application/documentos/extrair-com-ocr.ts` (2ª tentativa), `reprocessarOcr` no service, `scripts/doc-ocr.ts`, `vendor/tessdata/por.traineddata.gz`. **Sem migração** (`ok_ocr`/`ok_ocr_parcial` são texto).
+- **Config (.env):** `OCR_ENABLED`, `OCR_IDIOMA`, `OCR_MIN_CONFIANCA`, `OCR_MAX_PAGINAS`, `OCR_TESSDATA_DIR`.
+- **Isolamento:** o re-OCR relê o Storage só após `getById` confirmar a posse (RLS) — nunca toca arquivo de outro dono.
+- **Testar — automatizado:** `tests/ocr-policy.test.ts`, `tests/extrair-com-ocr.test.ts` e casos de OCR em `tests/documento-service.test.ts` (salvar imagem→ok_ocr; baixa confiança→sem_texto; reprocessarOcr idempotente **e isolado A×B**).
+- **Testar — manual SEM chip (CLI):** `npm run doc:process -- <escaneado.pdf|foto.jpg> --telefone <tel> --acao ambos` e `npm run doc:ocr [-- --telefone <tel>] [--max-paginas N]`.
+- **Railway:** sem ajuste de deploy (WASM/prebuilt); pico de memória do OCR ~150–300MB → **container ≥1GB recomendado**.
+
 ---
 
 ## Comandos úteis (scripts npm)
@@ -149,6 +159,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | `npm run doc:reindex [-- --lote N]` | **Backfill** dos embeddings de documentos sem vetor (idempotente; back-office). | Preparar a busca semântica em acervo já existente (12B). |
 | `npm run doc:search -- --telefone <tel> "<referência>"` | Busca documentos pelo caminho real (exata + semântica; link assinado). | Validar a busca e o **isolamento** (12B) sem chip. |
 | `npm run doc:summary -- --telefone <tel> "<referência>" [--modo guardado\|novo] [--foco "..."]` | Resume um documento guardado (salvo ou novo relendo o Storage). | Validar o resumo (12C) e o isolamento na releitura sem chip. |
+| `npm run doc:ocr [-- --telefone <tel>] [--max-paginas N] [--lote N]` | Re-OCR (idempotente) dos documentos `sem_texto` (escaneados antigos). Offline, lê mais páginas. | Tirar do ponto cego (13) o acervo escaneado já guardado. |
 | `npm run doc:doctor` | Diagnóstico (somente leitura) dos pré-requisitos do fluxo: banco, colunas/migração, pgvector, bucket. | Antes de rodar o fluxo de documentos; achar o que falta. |
 | `npm run doc:bucket` | Cria o bucket privado `DOCUMENTOS_BUCKET` (idempotente). | Primeiro uso do fluxo de documentos. |
 | `npm run seed:assinante -- <tel>` | Cria/atualiza um assinante de teste (admin). | Destravar testes sem onboarding. |
@@ -181,7 +192,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | Documentos (12B) — buscar (exata + semântica) + isolamento | ✅ | ✅ validável por `doc:reindex` + `doc:search` | **Não** — valida pela CLI (isolamento provado em testes + Postgres real) |
 | Documentos (12C) — resumir guardado (salvo/novo) + isolamento na releitura | ✅ | ✅ validável por `doc:summary` | **Não** — valida pela CLI (isolamento da releitura provado em testes + ponta a ponta) |
 | Documentos — receber pelo WhatsApp (download da mídia) | ✅ (código) | ❌ PENDENTE | **Sim** (chip) |
-| Documentos — PDF-imagem/foto (OCR) | ❌ Ainda não | — | Avisa e marca `sem_texto` (ponto cego da busca) |
+| Documentos (13) — OCR local (PDF escaneado/foto) | ✅ | ✅ validável por `doc:process`/`doc:ocr` | **Não** — valida pela CLI (documento nunca sai do ambiente; ≥1GB no Railway) |
 | Migrações 0019 (sync) / 0020 (memória) / 0021 (lembrete) / 0024 (embedding doc) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |
 
 **Resumo do que dá para validar JÁ, sem chip:** (1) **Cérebro 2** ponta a ponta pela

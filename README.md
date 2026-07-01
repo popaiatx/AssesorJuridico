@@ -423,6 +423,49 @@ npm run doc:process -- ./intimacao.pdf --telefone 5511999990001 --acao salvar --
 > O **download da mídia do WhatsApp** (receber o arquivo pelo Zap) depende do chip —
 > o código está pronto (`MediaDownloader`), validação manual pendente.
 
+## OCR local — PDF escaneado e foto (Passo 13)
+
+Quando a extração nativa falha (PDF escaneado, imagem/foto), o sistema tenta **OCR
+LOCAL** como **segunda tentativa** — o documento sigiloso **nunca sai do ambiente**
+(LGPD/OAB). Stack 100% WASM/pré-compilada, **sem dependência de sistema**: `tesseract.js`
+(OCR) + `@hyzyla/pdfium` (rasteriza PDF→imagem) + `sharp`. O modelo `por` é **vendorizado**
+(`vendor/tessdata`) — sem download em runtime.
+
+- **Encaixe:** extração nativa vazia → OCR. Se o texto sai confiável, o documento segue o
+  fluxo normal (chaves + resumo + embedding) e vira **`ok_ocr`** — passando a ser achável
+  por conteúdo (deixa o ponto cego). Se o OCR também não lê, continua `sem_texto`.
+- **Confiança (não vira fonte de erro):** abaixo de `OCR_MIN_CONFIANCA` o texto **não é
+  usado** (nem chaves) — melhor o documento ficar fora da busca do que registrar um número
+  errado. O usuário é avisado ("li apenas parcialmente; reenvie com mais nitidez").
+- **Transparência:** todo documento lido por OCR é marcado como tal ao guardar, na busca e
+  no resumo ("🔎 lido por OCR — confira, sobretudo números") — nunca se confunde texto
+  nativo (confiável) com OCR (a conferir).
+- **Desempenho:** OCR é lento (segundos/página). No fluxo da conversa vale o teto
+  `OCR_MAX_PAGINAS` (default 3): PDF maior é lido só nas primeiras N páginas, **com aviso**
+  (`ok_ocr_parcial` — "li as primeiras N de M"), e a busca/chaves refletem só o que foi
+  lido. Para o documento **inteiro**, use o re-OCR offline (`doc:ocr`, sem limite prático).
+- **Isolamento:** o re-OCR relê o arquivo do Storage só após confirmar a posse por tenant
+  (`getById`); nunca toca arquivo de outro dono.
+- **Config:** `OCR_ENABLED`, `OCR_IDIOMA`, `OCR_MIN_CONFIANCA`, `OCR_MAX_PAGINAS`,
+  `OCR_TESSDATA_DIR` (ver `.env.example`).
+
+### Testar pela CLI (sem chip)
+
+```bash
+# PDF escaneado / foto → OCR no fluxo normal (vira ok_ocr, entra na busca):
+npm run doc:process -- ./contrato-escaneado.pdf --telefone 5511999990001 --acao ambos
+npm run doc:process -- ./foto-documento.jpg     --telefone 5511999990001 --acao salvar
+
+# Re-OCR (idempotente) dos documentos antigos que estão como sem_texto:
+npm run doc:ocr                                  # todos (lote padrão)
+npm run doc:ocr -- --telefone 5511999990001      # só de um assinante
+npm run doc:ocr -- --max-paginas 50 --lote 100   # offline: lê mais páginas por doc
+```
+
+> **Railway:** nenhum ajuste de deploy — `npm install` resolve tudo (WASM/prebuilt). O OCR
+> usa **~150–300MB de memória** em pico durante o reconhecimento; **recomendado container
+> ≥1GB**. O modelo `por` (~1,4MB) e o core WASM já vão no repo/node_modules — sem CDN.
+
 ## Busca de documentos (Passo 12B)
 
 Encontrar um documento guardado **sem lembrar o nome do arquivo** — por referência
@@ -750,6 +793,7 @@ Scripts: `dev`, `build`, `start`, `typecheck`, `lint`, `format`, `test`,
 `seed:assinante`, `reset:assinante`, `trial:expire`, `ingest:corpus`,
 `sync:corpus`, `ask:rag`, `send:lembretes`, `doc:process`, `doc:reindex`,
 `doc:search`, `doc:summary` (resume um documento guardado — 12C),
+`doc:ocr` (re-OCR dos escaneados sem_texto — 13),
 `doc:doctor` (diagnóstico de pré-requisitos do fluxo de documentos),
 `doc:bucket` (cria o bucket privado), `db:start`, `db:reset`, `db:migration`,
 `db:push`.

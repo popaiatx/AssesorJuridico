@@ -201,11 +201,11 @@ export interface DocSemEmbedding {
   buscaTexto: string;
 }
 
-/** Documentos com texto (ok) e busca_texto, mas SEM embedding ainda (idempotente). */
+/** Documentos com texto (nativo ou OCR) e busca_texto, mas SEM embedding (idempotente). */
 export async function listarDocumentosSemEmbedding(limite: number): Promise<DocSemEmbedding[]> {
   const rows = await pool<{ id: string; assinante_id: string; busca_texto: string }[]>`
     select id, assinante_id, busca_texto from documentos
-    where embedding is null and extracao_status = 'ok'
+    where embedding is null and extracao_status in ('ok', 'ok_ocr', 'ok_ocr_parcial')
       and busca_texto is not null and status = 'guardado'
     limit ${limite}
   `;
@@ -215,4 +215,32 @@ export async function listarDocumentosSemEmbedding(limite: number): Promise<DocS
 /** Grava o embedding de um documento (back-office). */
 export async function setDocumentoEmbedding(id: string, embedding: number[]): Promise<void> {
   await pool`update documentos set embedding = ${vectorLiteral(embedding)}::vector where id = ${id}`;
+}
+
+// --- Re-OCR dos "ponto cego" (BACK-OFFICE / CLI doc:ocr) ---
+
+export interface DocSemTexto {
+  id: string;
+  assinanteId: string;
+  nome: string;
+}
+
+/** Documentos `sem_texto` guardados (candidatos a re-OCR). Opcionalmente de 1 tenant. */
+export async function listarDocumentosSemTexto(
+  limite: number,
+  assinanteId?: string,
+): Promise<DocSemTexto[]> {
+  const rows = assinanteId
+    ? await pool<{ id: string; assinante_id: string; nome: string }[]>`
+        select id, assinante_id, nome from documentos
+        where extracao_status = 'sem_texto' and status = 'guardado'
+          and assinante_id = ${assinanteId}
+        order by enviado_em limit ${limite}
+      `
+    : await pool<{ id: string; assinante_id: string; nome: string }[]>`
+        select id, assinante_id, nome from documentos
+        where extracao_status = 'sem_texto' and status = 'guardado'
+        order by enviado_em limit ${limite}
+      `;
+  return rows.map((r) => ({ id: r.id, assinanteId: r.assinante_id, nome: r.nome }));
 }
