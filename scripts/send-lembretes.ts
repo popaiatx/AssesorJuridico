@@ -39,8 +39,9 @@ requireEnv(
   dryRun ? 'o dry-run de lembretes' : 'o envio de lembretes (npm run send:lembretes)',
 );
 
-const { remindersStore, withLembretesLock } = await import('../src/infra/db/reminders-store.js');
+const { remindersStore, cobrancasStore, withLembretesLock } = await import('../src/infra/db/reminders-store.js');
 const { sendLembretes } = await import('../src/application/lembretes/send-lembretes.js');
+const { sendCobrancas } = await import('../src/application/lembretes/send-cobrancas.js');
 const { config } = await import('../src/infra/config/index.js');
 const { closeDatabase } = await import('../src/infra/db/tenant.js');
 
@@ -85,8 +86,9 @@ async function buildSender(): Promise<LembreteSender> {
 
 try {
   const sender = await buildSender();
-  const result = await withLembretesLock(() =>
-    sendLembretes(
+  // As DUAS fontes (agenda + cobrança) rodam sob o MESMO advisory lock.
+  const result = await withLembretesLock(async () => {
+    const agenda = await sendLembretes(
       {
         store: remindersStore,
         sender,
@@ -96,25 +98,42 @@ try {
         logger,
       },
       { dryRun },
-    ),
-  );
+    );
+    const cobrancas = await sendCobrancas(
+      { store: cobrancasStore, sender, now: () => now, graceMin: config.LEMBRETES_GRACE_MIN, logger },
+      { dryRun },
+    );
+    return { agenda, cobrancas };
+  });
 
   if (result === null) {
     console.log('Outra rodada de lembretes já está em andamento — nada a fazer.');
-  } else if (result.dryRun) {
+  } else if (dryRun) {
     console.log(`\n=== DRY-RUN (agora=${now.toISOString()}) — NADA foi enviado nem marcado ===`);
-    console.log(`Lembretes devidos: ${result.verificados}`);
-    for (const p of result.preview) {
+    console.log(`Lembretes de AGENDA devidos: ${result.agenda.verificados}`);
+    for (const p of result.agenda.preview) {
       console.log(`\n→ para ${p.telefone} | compromisso ${p.compromissoId} | disparo ${p.lembreteEm}`);
       console.log(`  ${p.mensagem}`);
     }
-    if (result.preview.length === 0) console.log('(nenhum lembrete na janela agora)');
+    console.log(`\nLembretes de COBRANÇA devidos: ${result.cobrancas.verificados}`);
+    for (const p of result.cobrancas.preview) {
+      console.log(`\n→ para ${p.telefone} | parcela ${p.lancamentoId} | disparo ${p.lembreteEm}`);
+      console.log(`  ${p.mensagem}`);
+    }
+    if (result.agenda.preview.length === 0 && result.cobrancas.preview.length === 0) {
+      console.log('(nenhum lembrete na janela agora)');
+    }
   } else {
     console.log(
-      `\nLembretes (${result.status}): verificados=${result.verificados} ` +
-        `enviados=${result.enviados} falhas=${result.falhas}`,
+      `\nAgenda (${result.agenda.status}): verificados=${result.agenda.verificados} ` +
+        `enviados=${result.agenda.enviados} falhas=${result.agenda.falhas}`,
     );
-    for (const e of result.erros) console.log(`  • ${e.compromissoId}: ${e.erro}`);
+    for (const e of result.agenda.erros) console.log(`  • ${e.compromissoId}: ${e.erro}`);
+    console.log(
+      `Cobranças (${result.cobrancas.status}): verificados=${result.cobrancas.verificados} ` +
+        `enviados=${result.cobrancas.enviados} falhas=${result.cobrancas.falhas}`,
+    );
+    for (const e of result.cobrancas.erros) console.log(`  • ${e.lancamentoId}: ${e.erro}`);
   }
 } catch (err) {
   console.error('Falha no job de lembretes:', err);

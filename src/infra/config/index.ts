@@ -71,6 +71,16 @@ const envSchema = z.object({
   LEMBRETES_GRACE_MIN: z.coerce.number().int().positive().default(60),
   // Fuso para EXIBIR a hora no texto do lembrete (a comparação é em UTC).
   LEMBRETES_TIMEZONE: z.string().default('America/Sao_Paulo'),
+  // Lembrete de COBRANÇA (Passo 16): dias antes do vencimento ("0" = só no dia;
+  // "3,0" = 3 dias antes E no dia) e horário local (BRT) do disparo.
+  COBRANCA_LEMBRETE_DIAS_ANTES: z
+    .string()
+    .regex(/^\d+(,\d+)*$/, 'lista de dias separada por vírgula, ex.: "3,0"')
+    .default('0'),
+  COBRANCA_LEMBRETE_HORA: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'horário HH:MM, ex.: 09:00')
+    .default('09:00'),
 
   // Documentos (Passo 12A). Bucket PRIVADO; link assinado curto; limite de tamanho.
   DOCUMENTOS_BUCKET: z.string().default('documentos'),

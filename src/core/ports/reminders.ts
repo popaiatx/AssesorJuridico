@@ -31,3 +31,32 @@ export interface RemindersStore {
 export interface LembreteSender {
   enviar(telefone: string, mensagem: string): Promise<void>;
 }
+
+// --- Passo 16: lembrete de COBRANÇA (parcela de honorário vencendo) ---
+// O aviso vai SEMPRE ao PRÓPRIO advogado — o sistema NUNCA cobra o cliente final.
+
+/** Uma cobrança devida (parcela pendente cujo instante caiu na janela). */
+export interface DueCobranca {
+  assinanteId: string;
+  /** Telefone do assinante (destinatário — o próprio advogado). */
+  telefone: string;
+  lancamentoId: string;
+  /** Instante do lembrete (ISO, UTC) — computado do vencimento na seleção. */
+  lembreteEm: string;
+  /** Vencimento da parcela (YYYY-MM-DD). */
+  vencimento: string;
+  /** Valor decimal ("1000.00"). */
+  valorDecimal: string;
+  parcela: number | null;
+  totalParcelas: number | null;
+  descricao: string | null;
+  processoNumero: string | null;
+  clienteNome: string | null;
+}
+
+export interface CobrancasStore {
+  /** Cobranças na janela [agora - graceMin, agora], sem as já enviadas. */
+  due(agoraIso: string, graceMin: number): Promise<DueCobranca[]>;
+  /** Marca como enviada (atômico/idempotente). TRUE = marcou agora. */
+  marcarEnviada(lancamentoId: string, lembreteEmIso: string): Promise<boolean>;
+}
