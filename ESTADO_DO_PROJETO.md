@@ -355,11 +355,19 @@
 
 ## Próximos passos previstos
 
-1. **Agendar os Railway Crons** (sync semanal + lembretes 15 min), **aprovar o template
+> **MUDANÇA DE DIREÇÃO (2026-07-01): existe um plano de expansão completo em
+> [`PLANO_EXPANSAO.md`](PLANO_EXPANSAO.md) — renomeação para "estagiárIA", uma
+> conta/dois canais (WhatsApp + dashboard web), ficha do processo + financeiro,
+> documentos em pastas e dashboard com chat (Passos 14–24, Fases A/B/C).
+> Status: PROPOSTA aguardando aprovação do sócio — NADA implementado ainda.**
+
+1. **Decidir/aprovar o `PLANO_EXPANSAO.md`** (por fase); com aprovação, a Fase A
+   começa no Passo 14 (renomeação).
+2. **Agendar os Railway Crons** (sync semanal + lembretes 15 min), **aprovar o template
    na Meta**, **criar o bucket `documentos`** e **validar pelo WhatsApp** (memória, C1,
    RAG, lembrete, documentos) quando houver chip; pagamento sandbox (6B).
-2. **Jurisprudência — agregador pago** ou **Cérebro 3 (tribunais)**.
-3. Financeiro (honorários/custos).
+3. **Jurisprudência — agregador pago** ou **Cérebro 3 (tribunais)** (não entraram no
+   plano de expansão; seguem na fila, dependem de provedor externo).
 
 ## Como rodar
 
