@@ -555,6 +555,41 @@ npm run doc:summary -- --telefone 5511999990001 "contrato" --modo novo --foco "p
 > cobertos por testes automatizados; na CLI a referência é por nome/número. O isolamento na
 > releitura do Storage é testado com 2 assinantes (A nunca lê/gera resumo de documento de B).
 
+## Ficha do processo (Passo 15)
+
+A "pasta" do processo: **uma consulta agregada** (não uma tabela nova) que junta, para
+um processo do próprio assinante, os **dados** (número, cliente, parte contrária, vara,
+comarca, área, valor da causa, status, **fase**, **instância** — migração `0025`), a
+**agenda** vinculada (futuros + últimos ocorridos), os **documentos** vinculados (com a
+marca "lido por OCR" preservada) e o **financeiro** do processo (a seção já consulta
+`lancamentos_financeiros`; o Passo 16 passa a preenchê-la).
+
+- **Dois consumidores por desenho:** o serviço (`FichaProcessoService`) devolve um
+  **objeto estruturado** (`FichaProcesso`); a formatação WhatsApp é uma camada separada
+  (`ficha-format`). O dashboard (Fase C) consumirá o MESMO objeto via API.
+- **Sem LLM na resposta:** a montagem e a formatação são determinísticas — nenhum dado
+  do cliente sai para o modelo nesta leitura.
+- **Referência natural:** CNJ completo, **fragmento do número** ("processo 12345", ≥4
+  dígitos) ou nome (cliente/parte). O fragmento vale também para as ações do Passo 11.
+- **Ambíguo → desambiguação numerada** (nunca adivinha); nenhum → resposta clara.
+- **Ficha honesta:** seção vazia aparece vazia com clareza; anti-paredão por contagens
+  ("… e mais N — quer a lista?"); 🔒 para segredo de justiça; rodapé de apoio.
+- **Isolamento na agregação:** UMA transação `withTenant` com `assinante_id` embutido
+  nas 4 consultas; posse do processo re-verificada na primeira (id alheio → null, nenhum
+  filho é lido); RLS force de backstop; FKs compostas amarram filho ao (processo, tenant).
+- **`editar_processo`** ganhou `fase`/`instância` (confirmação antes de gravar, como sempre).
+
+### Testar pela CLI (sem chip)
+
+```bash
+npm run ficha -- --telefone 5511999990001 "12345"        # fragmento do número
+npm run ficha -- --telefone 5511999990001 "Maria Silva"  # por cliente/parte
+```
+
+> Isolamento provado por testes adversariais (A×B com números similares e filhos
+> "parecidos") e validado ponta a ponta contra o Supabase real: o fragmento que casa
+> nos dois tenants devolve **só** o processo do próprio assinante, em todas as seções.
+
 ## Webhook do WhatsApp (Cloud API)
 
 Entrada real do produto. Só é registrado se as `WHATSAPP_*` estiverem

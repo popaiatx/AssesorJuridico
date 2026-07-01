@@ -451,6 +451,29 @@ const arquivarProcessoAcao: ActionDef = {
   },
 };
 
+// --- Passo 15: ficha do processo (LEITURA agregada; o handler resolve o alvo
+// e desambigua como nas edições, mas sem confirmação — leitura não grava) ---
+
+const consultarFicha: ActionDef = {
+  name: 'consultar_ficha',
+  kind: 'leitura',
+  description:
+    'Mostrar a FICHA COMPLETA de um processo: dados, agenda, documentos e financeiro juntos. ' +
+    'Use quando pedirem "ficha", "resumo do processo", "tudo sobre o processo do fulano". ' +
+    'Identifique o alvo por número (CNJ completo ou trecho), cliente ou parte.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { ...SEL_PROCESSO },
+    required: [],
+  },
+  validate(input) {
+    const { sel, erro } = parseSelectorProcesso(input);
+    const temSelector = sel.alvoCnj || sel.alvoNumero || sel.alvoCliente || sel.alvoParte;
+    return { value: sel, faltando: [], erro: erro ?? (temSelector ? null : SEM_SELETOR_PROCESSO) };
+  },
+};
+
 const ajudaAssessor: ActionDef = {
   name: 'ajuda_assessor',
   kind: 'ajuda',
@@ -471,6 +494,7 @@ export const ACTIONS: ActionDef[] = [
   consultarProcesso,
   editarProcesso,
   arquivarProcessoAcao,
+  consultarFicha,
   ajudaAssessor,
 ];
 

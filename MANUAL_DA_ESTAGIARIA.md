@@ -141,6 +141,36 @@ estagiárIA dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pes
 **3 dias de teste grátis**. Depois do teste, para continuar usando é preciso
 **assinar** — enquanto não assina, ela avisa e direciona para o pagamento.
 
+### 9. A ficha do processo (tudo num só lugar)
+**O que faz:** você pede a **ficha** de um processo e ela junta, numa resposta só, tudo
+o que existe sobre ele: os dados (número, cliente, parte contrária, vara/comarca, área,
+valor da causa, status, fase, instância), a **agenda** vinculada, os **documentos**
+guardados nele e o **financeiro** (que será preenchido quando os honorários chegarem).
+Você pode se referir ao processo do jeito que fala no dia a dia: pelo número completo,
+por um **pedaço do número** ou pelo **nome do cliente**.
+
+**Exemplos:**
+- Você: *"mostra a ficha do processo 12345"* ou *"me dá um resumo do processo do Gabriel"*
+  Ela responde algo assim:
+  > 📁 *Ficha do processo*
+  > nº 00012345620248260100
+  > 👤 Cliente: Maria Silva · ⚖️ Contra: Empresa X
+  > 🏛️ 2ª Vara Cível — São Paulo · área: cível · fase: conhecimento · status: ativo
+  > 💵 Valor da causa: R$ 15.000,00
+  > 📅 *Agenda* — audiência 15/07 14:00 — Instrução
+  > 📎 *Documentos (1)* — contrato-maria.pdf
+  > 💰 *Financeiro* — 1 pendente: R$ 1.000,00 · 1 pago: R$ 500,50
+  > _Dados de apoio — confira nos autos._
+- Se **mais de um** processo combinar com a referência, ela lista numerado e pergunta
+  **qual** — nunca escolhe "no chute". Se nenhum combinar, ela diz com clareza.
+- Você também pode atualizar a **fase** e a **instância**: *"muda a fase do processo
+  12345 para execução"* — com confirmação antes de gravar, como sempre.
+
+**Bom saber:** a ficha é honesta — seção sem conteúdo aparece como *"sem documentos
+vinculados ainda"* (nada some em silêncio); documento lido por OCR mantém o aviso de
+conferência; e processo em segredo de justiça vem marcado com 🔒. Como todo o resto,
+a ficha é **só sua**: ela nunca mistura nem mostra dados de outra conta.
+
 ---
 
 ## Parte 3 — O que ela ainda NÃO faz (e o que vem por aí)
@@ -183,6 +213,7 @@ modelo de mensagem junto à Meta).
 - ✓ **Cadastrar e consultar processos por conversa** — organização sem planilha.
 - ✓ **Vincular processo ao cliente** — tudo conectado.
 - ✓ **Editar/arquivar processos** — manter a base limpa (arquivar é reversível). *(editar/arquivar cliente: a seguir)*
+- ✓ **Ficha do processo** — tudo do processo (dados, agenda, documentos, financeiro) numa resposta só, pedindo em linguagem natural.
 - ▶ **Andamento processual (monitorar tribunais)** — ser avisado quando o processo anda.
 - ▶ **Resumo da última movimentação** — entender o que aconteceu em uma frase.
 - 💡 **Ficha do cliente** (histórico, contatos, processos) — visão 360º de cada cliente.
@@ -230,6 +261,7 @@ modelo de mensagem junto à Meta).
 | Lembretes automáticos (24h e 1h) | ✅ Sim (lógica pronta) | **Sim** | Envio real depende do chip + aprovação do modelo na Meta |
 | Cadastro + 3 dias de teste + assinatura | ✅ Sim | Sim | Fluxo real acontece pelo WhatsApp |
 | Editar/cancelar compromissos; editar/arquivar processos | ✅ Sim | Sim | Confirma mostrando o registro real; remarcar reprograma lembretes; processo é arquivado, não apagado |
+| Ficha do processo (dados + agenda + documentos + financeiro) | ✅ Sim | Para uso real, sim | Por número (ou trecho) ou cliente; seções vazias aparecem com clareza; validável internamente |
 | Receber/ler/resumir/guardar documentos (PDF/Word/texto) | ✅ Sim | Recebimento pelo Zap depende do chip | Guarda com informações-chave; escaneado/foto é lido por OCR (linha abaixo) |
 | Encontrar documentos por conteúdo (busca) | ✅ Sim | Para uso real, sim | Por número/nome/trecho ou por assunto; só os seus; validável internamente |
 | Resumir um documento guardado | ✅ Sim | Para uso real, sim | Resumo salvo (na hora) ou novo com foco; só os seus; validável internamente |

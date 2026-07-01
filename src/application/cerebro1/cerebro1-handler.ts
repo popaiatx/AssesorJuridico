@@ -31,6 +31,8 @@ import type {
   ProcessoRow,
 } from '../../core/ports/cerebro1.js';
 import type { LlmPort } from '../../core/ports/llm.js';
+import { formatarFicha } from '../../core/domain/cerebro1/ficha-format.js';
+import type { FichaProcessoService } from './ficha-processo.js';
 import { selectAction } from './select-action.js';
 import { formatCompromissos, respondProcessos } from './read-responder.js';
 
@@ -44,6 +46,8 @@ export interface Cerebro1HandlerDeps {
   pending: PendingActionStore;
   clock: () => Date;
   logger: Logger;
+  /** Ficha do processo (Passo 15). Sem ela, `consultar_ficha` avisa com honestidade. */
+  ficha?: FichaProcessoService;
 }
 
 const FALHA_GENERICA =
@@ -185,6 +189,12 @@ export class Cerebro1Handler implements IntentHandler {
       // Edição/remoção: resolve o ALVO real (escopado por tenant), desambigua se
       // houver vários, e confirma mostrando o registro real (reforçado p/ remoção).
       return this.resolverEConfirmar(assinanteId, def, r.value);
+    }
+
+    if (def.name === 'consultar_ficha') {
+      // Leitura AGREGADA (Passo 15): resolve o alvo como nas edições (escopado,
+      // desambiguação numerada), mas responde direto — leitura não pede confirmação.
+      return this.resolverFicha(assinanteId, r.value);
     }
 
     if (def.kind === 'escrita') {
@@ -351,8 +361,69 @@ export class Cerebro1Handler implements IntentHandler {
       await this.deps.pending.clear(assinanteId);
       return { replyText: AJUDA_TEXT };
     }
+    if (pend.acao === 'consultar_ficha') {
+      // Leitura: o número escolhido resolve e a ficha sai direto (sem confirmação).
+      try {
+        return await this.responderFicha(assinanteId, cands[n - 1]!.id);
+      } catch (err) {
+        this.deps.logger.error({ err }, 'cerebro1: falha ao montar a ficha');
+        return { replyText: FALHA_GENERICA };
+      }
+    }
     const { _candidatos, ...value } = pend.params;
     return this.confirmarEdicao(assinanteId, def, value, cands[n - 1]!.id);
+  }
+
+  // --- Passo 15: ficha do processo (leitura agregada, escopada por tenant) ---
+
+  private async resolverFicha(
+    assinanteId: string,
+    value: Record<string, unknown>,
+  ): Promise<HandlerResult> {
+    if (!this.deps.ficha) {
+      return { replyText: 'A ficha do processo não está disponível neste ambiente ainda.' };
+    }
+    try {
+      const candidatos = await this.deps.store.findProcessos(assinanteId, {
+        numeroCnj: (value.alvoCnj as string) ?? null,
+        numeroFragmento: (value.alvoNumero as string) ?? null,
+        clienteNome: (value.alvoCliente as string) ?? null,
+        parte: (value.alvoParte as string) ?? null,
+      });
+      if (candidatos.length === 0) {
+        await this.deps.pending.clear(assinanteId);
+        return {
+          replyText: 'Não encontrei esse processo. Pode me dizer o número (CNJ ou um trecho), o cliente ou a parte?',
+        };
+      }
+      if (candidatos.length === 1) return await this.responderFicha(assinanteId, candidatos[0]!.id);
+
+      // >1 → desambiguação numerada (mesma disciplina do Passo 11; nunca adivinha).
+      const cands = candidatos.map((p) => ({
+        id: p.id,
+        label: rotuloProcesso(p) + (p.status ? ` — ${p.status}` : ''),
+      }));
+      await this.deps.pending.save(assinanteId, {
+        acao: 'consultar_ficha',
+        params: { ...value, _candidatos: cands },
+        fase: 'desambiguando',
+        faltando: [],
+      });
+      const lista = cands.map((c, i) => `${i + 1}) ${c.label}`).join('\n');
+      return { replyText: `Encontrei mais de um processo. Qual deles?\n${lista}\nResponda com o número.` };
+    } catch (err) {
+      this.deps.logger.error({ err }, 'cerebro1: falha ao resolver a ficha');
+      return { replyText: FALHA_GENERICA };
+    }
+  }
+
+  private async responderFicha(assinanteId: string, processoId: string): Promise<HandlerResult> {
+    await this.deps.pending.clear(assinanteId);
+    // Posse re-verificada por tenant DENTRO da agregação (getFichaBruta): id de
+    // processo alheio devolve null e nenhum dado é lido.
+    const ficha = await this.deps.ficha!.montarPorId(assinanteId, processoId);
+    if (!ficha) return { replyText: 'Não encontrei mais esse processo (pode ter sido alterado).' };
+    return { replyText: formatarFicha(ficha) };
   }
 
   private async confirmarEdicao(

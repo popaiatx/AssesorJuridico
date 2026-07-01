@@ -41,10 +41,14 @@
   persona; grafia oficial fixada no `CLAUDE.md`; manual renomeado para
   `MANUAL_DA_ESTAGIARIA.md` + PDF; identificadores técnicos intocados). O
   **`PLANO_EXPANSAO.md` foi APROVADO na revisão de 2026-07-01** (decisões
-  registradas na seção 9). Falta **agendar os Crons no Railway** (sync semanal + lembretes 15
-  min), **aprovar o template `lembrete_generico` na Meta** (submeter já como
-  estagiárIA), **criar o bucket `documentos`** e **validar pelo WhatsApp** (download de mídia, chip).
-  Próximo: **Passo 15 — ficha do processo** (Fase A do plano de expansão).
+  registradas na seção 9). Concluído também o **Passo 15 — ficha do processo**
+  (consulta AGREGADA: dados + agenda + documentos + financeiro; objeto
+  estruturado p/ dois canais; seletor com fragmento de número; validada ponta a
+  ponta no Supabase real com 2 assinantes adversariais). Falta **agendar os
+  Crons no Railway** (sync semanal + lembretes 15 min), **aprovar o template
+  `lembrete_generico` na Meta** (submeter já como estagiárIA), **criar o bucket
+  `documentos`** e **validar pelo WhatsApp** (download de mídia, chip).
+  Próximo: **Passo 16 — honorários/parcelas** (Fase A do plano de expansão).
   Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B) — pelo chip.
 
 ## O que já está pronto
@@ -243,6 +247,24 @@
   identificador técnico mudou** (repo, tabelas, variáveis, `ajuda_assessor` etc.).
   Template `lembrete_generico` será submetido à Meta já com o nome novo. Testes com
   asserções da marca. **320 testes verdes.**
+- **Passo 15 — ficha do processo (Fase A do plano de expansão).** Migração 0025
+  (`processos.fase`/`instancia`, texto livre). **Ficha = consulta agregada** (não
+  tabela): `FichaStore.getFichaBruta` roda UMA transação `withTenant` com
+  `assinante_id` embutido nas 4 consultas (processo com posse re-verificada →
+  agenda → documentos guardados → `lancamentos_financeiros`, slot REAL que o
+  Passo 16 preenche); RLS backstop + FKs compostas. **Objeto estruturado**
+  (`FichaProcesso`, serviço `FichaProcessoService`) separado da formatação
+  (`ficha-format`, única camada com texto/emoji — o dashboard da Fase C consome
+  o MESMO objeto). Ficha honesta: seções vazias explícitas, marca de OCR
+  preservada, anti-paredão (contagens + oferta), 🔒 segredo de justiça, somas em
+  centavos inteiros. Ação `consultar_ficha` (leitura direta, desambiguação
+  numerada reusando a fase do Passo 11); **seletor de processo aceita fragmento
+  ≥4 dígitos** ("processo 12345" — beneficia também editar/arquivar);
+  `editar_processo` ganhou fase/instância. A ficha NÃO usa LLM (determinística).
+  CLI `npm run ficha`. Validado ponta a ponta (Supabase real, 2 assinantes,
+  números SIMILARES com filhos "parecidos"): completa, vazia honesta, por nome,
+  ambígua numerada, fragmento exclusivo de B p/ A → não encontra; nada de B em
+  nenhuma seção de A. **341 testes verdes.**
 - **Fix Node 20 / WebSocket.** O `@supabase/supabase-js` construía um RealtimeClient
   que exigia WebSocket nativo (só no Node 22+), quebrando todos os scripts de banco
   no Node 20. `admin.ts` passou a desligar o Realtime (transport no-op) — roda no
@@ -376,7 +398,7 @@
 > pastas e dashboard com chat (Passos 14–24, Fases A/B/C). **APROVADO na revisão
 > de 2026-07-01** (decisões na seção 9 do plano). Passo 14 (renomeação) FEITO.**
 
-1. **Passo 15 — ficha do processo** (Fase A; aguarda o "aprovado" do passo).
+1. **Passo 16 — honorários/parcelas** (Fase A; aguarda o "aprovado" do passo).
 2. **Agendar os Railway Crons** (sync semanal + lembretes 15 min), **aprovar o template
    na Meta**, **criar o bucket `documentos`** e **validar pelo WhatsApp** (memória, C1,
    RAG, lembrete, documentos) quando houver chip; pagamento sandbox (6B).

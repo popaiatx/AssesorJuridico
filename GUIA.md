@@ -26,7 +26,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 `npm run sync:corpus` (ver README › Sincronização). Banco = Supabase via **pooler**
 (porta 6543). Segredos só em variáveis de ambiente; nunca no git.
 
-**Migrações:** `supabase db push` aplica as pendentes (até a `0019`).
+**Migrações:** `supabase db push` aplica as pendentes (até a `0025`).
 
 ---
 
@@ -46,6 +46,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | **Busca de documentos (12B)** | Acha um documento guardado por referência exata (número/nome/trecho) ou vaga (assunto), combinando busca textual + semântica; só do próprio assinante; devolve link assinado. |
 | **Resumir documento guardado (12C)** | Devolve o resumo de um documento do acervo (por ordinal da última busca, nome/número ou contexto): resumo salvo (instantâneo) ou novo relendo o Storage; isolado por tenant também na releitura. |
 | **OCR local (13)** | PDF escaneado/foto: extrai o texto por OCR LOCAL (documento nunca sai), tirando-o do ponto cego (ganha chaves/resumo/busca); marca "lido por OCR"; baixa confiança não indexa. |
+| **Ficha do processo (15)** | Consulta AGREGADA de um processo (dados + agenda + documentos + financeiro), por referência natural (nº/fragmento/cliente); objeto estruturado + formatação WhatsApp separada; seções vazias honestas. |
 
 ---
 
@@ -138,6 +139,14 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Testar — manual SEM chip (CLI):** `npm run doc:process -- <escaneado.pdf|foto.jpg> --telefone <tel> --acao ambos` e `npm run doc:ocr [-- --telefone <tel>] [--max-paginas N]`.
 - **Railway:** sem ajuste de deploy (WASM/prebuilt); pico de memória do OCR ~150–300MB → **container ≥1GB recomendado**.
 
+### 13. Ficha do processo (15)
+- **Faz:** "mostra a ficha do processo 12345" / "resumo do processo do Gabriel" → junta, numa resposta só, os dados do processo (nº, cliente, parte, vara/comarca, área, valor, status, **fase**, **instância**), a agenda vinculada (futuros + últimos), os documentos vinculados (marca de OCR preservada) e o financeiro do processo (seção real; o Passo 16 a preenche). Referência por CNJ, **fragmento do número (≥4 dígitos)** ou nome; ambíguo → desambiguação numerada; nenhum → claro. Leitura direta (sem confirmação — não grava). `editar_processo` ganhou fase/instância.
+- **Arquivos:** `src/core/ports/ficha.ts` (objeto estruturado — o dashboard da Fase C consome o MESMO), `src/infra/db/ficha-store.ts` (agregação escopada: 1 transação, 4 consultas com tenant embutido), `src/application/cerebro1/ficha-processo.ts` (serviço), `src/core/domain/cerebro1/ficha.ts` + `ficha-format.ts` (montagem pura + texto WhatsApp), ação `consultar_ficha` em `cerebro1-actions.ts`, migração `0025` (fase/instância).
+- **Config (.env):** só `DATABASE_URL` (a ficha NÃO usa LLM — resposta determinística; para o caminho WhatsApp, `LLM_*` como no Cérebro 1).
+- **Isolamento:** posse do processo re-verificada NA agregação (id alheio → null, nenhum filho lido); `assinante_id` em cada consulta; RLS force backstop; FK composta amarra filho a (processo, tenant).
+- **Testar — automatizado:** `tests/ficha-format.test.ts` (seções vazias honestas, marca OCR, anti-paredão, 🔒), `tests/ficha-processo.test.ts` (montagem + isolamento A×B), `tests/cerebro1-ficha.test.ts` (handler: completa/vazia/ambígua/inexistente + adversarial com números similares).
+- **Testar — manual SEM chip (CLI):** `npm run ficha -- --telefone <tel> "<nº|trecho|cliente>"`. Rode com DOIS assinantes de números similares para ver o isolamento.
+
 ---
 
 ## Comandos úteis (scripts npm)
@@ -160,6 +169,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | `npm run doc:search -- --telefone <tel> "<referência>"` | Busca documentos pelo caminho real (exata + semântica; link assinado). | Validar a busca e o **isolamento** (12B) sem chip. |
 | `npm run doc:summary -- --telefone <tel> "<referência>" [--modo guardado\|novo] [--foco "..."]` | Resume um documento guardado (salvo ou novo relendo o Storage). | Validar o resumo (12C) e o isolamento na releitura sem chip. |
 | `npm run doc:ocr [-- --telefone <tel>] [--max-paginas N] [--lote N]` | Re-OCR (idempotente) dos documentos `sem_texto` (escaneados antigos). Offline, lê mais páginas. | Tirar do ponto cego (13) o acervo escaneado já guardado. |
+| `npm run ficha -- --telefone <tel> "<referência>"` | Mostra a FICHA do processo (dados + agenda + docs + financeiro) pelo serviço real. | Validar a ficha (15) e o isolamento sem chip. |
 | `npm run doc:doctor` | Diagnóstico (somente leitura) dos pré-requisitos do fluxo: banco, colunas/migração, pgvector, bucket. | Antes de rodar o fluxo de documentos; achar o que falta. |
 | `npm run doc:bucket` | Cria o bucket privado `DOCUMENTOS_BUCKET` (idempotente). | Primeiro uso do fluxo de documentos. |
 | `npm run seed:assinante -- <tel>` | Cria/atualiza um assinante de teste (admin). | Destravar testes sem onboarding. |
@@ -193,6 +203,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | Documentos (12C) — resumir guardado (salvo/novo) + isolamento na releitura | ✅ | ✅ validável por `doc:summary` | **Não** — valida pela CLI (isolamento da releitura provado em testes + ponta a ponta) |
 | Documentos — receber pelo WhatsApp (download da mídia) | ✅ (código) | ❌ PENDENTE | **Sim** (chip) |
 | Documentos (13) — OCR local (PDF escaneado/foto) | ✅ | ✅ validável por `doc:process`/`doc:ocr` | **Não** — valida pela CLI (documento nunca sai do ambiente; ≥1GB no Railway) |
+| Ficha do processo (15) — agregada + isolamento | ✅ | ✅ validada por `ficha` (Supabase real, 2 assinantes) | **Não** — valida pela CLI (uso pelo WhatsApp depende do chip) |
 | Migrações 0019 (sync) / 0020 (memória) / 0021 (lembrete) / 0024 (embedding doc) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |
 
 **Resumo do que dá para validar JÁ, sem chip:** (1) **Cérebro 2** ponta a ponta pela
