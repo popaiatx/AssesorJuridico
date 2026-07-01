@@ -85,8 +85,9 @@ datas, assunto) para você **encontrar o documento depois**.
 - Se for **foto ou PDF escaneado**, ele agora **lê o texto por reconhecimento de imagem (OCR)** — tudo **dentro do nosso ambiente** (o documento não é enviado a terceiros). Assim ele consegue resumir e indexar até um documento escaneado. Como OCR pode errar (sobretudo números), ele **avisa** que aquele conteúdo veio de OCR e pede conferência. Se a imagem estiver ruim demais para ler com segurança, ele é honesto: guarda o arquivo, avisa que só leu parcialmente e **não registra dados incertos** (melhor vazio que errado).
 
 **Bom saber:**
-- **Tipos que ele lê:** PDF com texto, Word (.docx) e texto (.txt). Outros tipos ele
-  guarda, mas avisa que não conseguiu ler o conteúdo.
+- **Tipos que ele lê:** PDF com texto, Word (.docx) e texto (.txt); e também **fotos e
+  PDFs escaneados** (por OCR). Formatos fora disso ele guarda, mas avisa que não
+  conseguiu ler o conteúdo.
 - **Tamanho:** há um limite por arquivo (ajustável). Acima dele, ele avisa com
   clareza e pede uma versão menor — em vez de falhar sem explicar.
 
@@ -105,9 +106,9 @@ os documentos mais prováveis com um **link para abrir**.
 **Importante:**
 - A busca é **só sua**: ele nunca mostra documento de outra pessoa — cada conta enxerga
   apenas os próprios arquivos.
-- Documento que entrou como **foto/escaneado** (sem texto) **não aparece** na busca por
-  conteúdo; quando isso for o caso, ele avisa quantos você tem assim e se oferece para
-  procurar por nome ou data.
+- Fotos e PDFs escaneados **também entram na busca** — ele lê o texto por OCR ao guardar.
+  Fica de fora só o que o OCR **não conseguiu ler** (imagem ruim); nesse caso ele avisa
+  quantos você tem assim e se oferece para procurar por nome ou data.
 - Ele **acha e entrega** o documento; para o **resumo** de um deles, é só pedir (abaixo).
 
 ### 7. Resumir um documento guardado
@@ -126,7 +127,9 @@ com um foco específico.
 - Por padrão ele entrega o **resumo que já tem guardado** — rápido e sem custo. Se o
   documento foi só salvo (sem resumo ainda), ele lê e monta o resumo na hora — e guarda
   para as próximas vezes.
-- Documento **escaneado/foto** (sem texto) → ele avisa que não dá para resumir o conteúdo.
+- Documento **escaneado/foto** lido por OCR pode ser resumido normalmente (com o aviso de
+  que a base veio de OCR). Só quando o OCR **não conseguiu ler** (imagem ruim) é que ele
+  avisa que não dá para resumir o conteúdo.
 - Se a referência combinar com **vários**, ele pergunta qual; se não achar nenhum, ele diz
   com clareza. Todo resumo vem com o aviso de que é **apoio** — confira no documento.
 - É **só seu**: ele nunca resume (nem lê) documento de outra pessoa.
@@ -142,7 +145,6 @@ assessor dá boas-vindas e faz um **cadastro rápido** (nome e e-mail). A pessoa
 ## Parte 3 — O que ele ainda NÃO faz (e o que vem por aí)
 
 - **Entender áudios** (mensagem de voz) — *(planejado, deixado para o final)*
-- **Ler imagens / PDF escaneado** (OCR) — hoje ele avisa que não consegue; *(planejado)*.
 - **Jurisprudência** (decisões de tribunais, súmulas) no acervo de consulta — hoje só
   legislação; jurisprudência virá por um provedor especializado. *(em breve)*
 - **Andamento processual** (acompanhar movimentações do processo nos tribunais e
@@ -207,7 +209,7 @@ modelo de mensagem junto à Meta).
 ### Cadastro, acesso e operação
 - ✓ **Cadastro simples + 3 dias de teste** — começar em segundos.
 - ✓ **Assinatura para continuar após o teste** — modelo do negócio.
-- ✓ **Entrar por áudio** *(quando o áudio chegar)* / **respostas só com fonte** — confiança.
+- ✓ **Respostas sempre com fonte** — confiança (nunca afirma sem citar a lei). *(entrar por áudio: ver "Entrada por voz")*
 - 💡 **Plano para escritório (vários advogados)** — crescer para times.
 - 💡 **Painel do dono do produto** (assinantes, uso, churn) — gestão do negócio.
 
@@ -227,7 +229,7 @@ modelo de mensagem junto à Meta).
 | Lembretes automáticos (24h e 1h) | ✅ Sim (lógica pronta) | **Sim** | Envio real depende do chip + aprovação do modelo na Meta |
 | Cadastro + 3 dias de teste + assinatura | ✅ Sim | Sim | Fluxo real acontece pelo WhatsApp |
 | Editar/cancelar compromissos; editar/arquivar processos | ✅ Sim | Sim | Confirma mostrando o registro real; remarcar reprograma lembretes; processo é arquivado, não apagado |
-| Receber/ler/resumir/guardar documentos (PDF/Word/texto) | ✅ Sim | Recebimento pelo Zap depende do chip | Guarda com informações-chave; PDF-imagem avisa que não leu |
+| Receber/ler/resumir/guardar documentos (PDF/Word/texto) | ✅ Sim | Recebimento pelo Zap depende do chip | Guarda com informações-chave; escaneado/foto é lido por OCR (linha abaixo) |
 | Encontrar documentos por conteúdo (busca) | ✅ Sim | Para uso real, sim | Por número/nome/trecho ou por assunto; só os seus; validável internamente |
 | Resumir um documento guardado | ✅ Sim | Para uso real, sim | Resumo salvo (na hora) ou novo com foco; só os seus; validável internamente |
 | Ler escaneados/fotos por OCR (local) | ✅ Sim | Para uso real, sim | Documento não sai do ambiente; marca "lido por OCR"; baixa qualidade não é indexada |
