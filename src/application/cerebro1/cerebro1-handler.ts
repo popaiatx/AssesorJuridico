@@ -525,7 +525,8 @@ export class Cerebro1Handler implements IntentHandler {
     // processo alheio devolve null e nenhum dado é lido.
     const ficha = await this.deps.ficha!.montarPorId(assinanteId, processoId);
     if (!ficha) return { replyText: 'Não encontrei mais esse processo (pode ter sido alterado).' };
-    return { replyText: formatarFicha(ficha) };
+    // Passo 18: a memória guarda o processo exibido ("guarda na pasta dele").
+    return { replyText: formatarFicha(ficha), processosListados: [processoId] };
   }
 
   private async confirmarEdicao(

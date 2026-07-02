@@ -57,7 +57,7 @@ import { supabaseDocumentoPastaStore } from '../../adapters/documentos/supabase-
 import { BuscarDocumentos } from '../../application/documentos/buscar-documentos.js';
 import { ResumirDocumento } from '../../application/documentos/resumir-documento.js';
 import { DocumentSearchHandler } from '../../application/documentos/document-search-handler.js';
-import { resolveProcessoIdByCnj } from '../db/cerebro1-store.js';
+import { findProcessos, resolveProcessoIdByCnj } from '../db/cerebro1-store.js';
 import {
   buscarDocumentosExato,
   buscarDocumentosSemantico,
@@ -239,6 +239,13 @@ function registerWhatsapp(app: FastifyInstance): void {
         resumo: resumoDocs,
         storage: supabaseStorage,
         urlTtlSec: config.DOCUMENTOS_URL_TTL_SEC,
+        // Pastas (Passo 18): mover documento + filtros por pasta.
+        pastas: {
+          store: supabaseDocumentoPastaStore,
+          pending: supabasePendingStore,
+          getDocumento: getDocumentoById,
+          findProcessos,
+        },
       });
       app.log.info(
         `Documentos: busca (12B) ${embeddings ? 'exata + semântica' : 'só exata'} + resumo (12C)` +

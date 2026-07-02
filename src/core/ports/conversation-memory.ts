@@ -21,6 +21,12 @@ export interface ConversationTurn {
    * tenant ao usar. Ausente quando a resposta não listou documentos.
    */
   docIds?: string[];
+  /**
+   * assistant (Passo 18): ids dos processos consultados/exibidos na resposta
+   * (ex.: a ficha do Passo 15) — para resolver "guarda na pasta DELE". Mesmas
+   * garantias dos docIds: referência opaca do tenant, posse re-verificada ao usar.
+   */
+  processoIds?: string[];
   /** ISO do momento do turno. */
   em: string;
 }

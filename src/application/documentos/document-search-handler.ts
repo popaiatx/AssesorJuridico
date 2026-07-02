@@ -12,8 +12,27 @@
  */
 import { marcaOcr } from '../../core/domain/documentos/formato.js';
 import { interpretarPedido, type AlvoResumo } from '../../core/domain/documentos/pedido-resumo.js';
-import { ultimaListaDocumentos } from '../../core/domain/conversation/memory.js';
-import type { DocumentoResultado } from '../../core/ports/documentos.js';
+import {
+  interpretarFiltroPasta,
+  interpretarMover,
+  type FiltroPasta,
+  type PedidoMover,
+} from '../../core/domain/documentos/pedido-mover.js';
+import { rotuloSugestao, type ProcessoSugestao } from '../../core/domain/documentos/sugestao-pasta.js';
+import {
+  ultimaListaDocumentos,
+  ultimoProcessoConsultado,
+} from '../../core/domain/conversation/memory.js';
+import type {
+  DocumentoPastaStore,
+  DocumentoResultado,
+  DocumentoRow,
+} from '../../core/ports/documentos.js';
+import type {
+  PendingActionStore,
+  ProcessoRow,
+  ProcessoSelector,
+} from '../../core/ports/cerebro1.js';
 import type { StoragePort } from '../../core/ports/storage.js';
 import type {
   HandlerResult,
@@ -28,6 +47,13 @@ export interface DocumentSearchHandlerDeps {
   resumo: ResumidorDocumento;
   storage: StoragePort;
   urlTtlSec: number;
+  /** Pastas (Passo 18): mover documento + filtros por pasta. Ausente → só 12B/12C. */
+  pastas?: {
+    store: DocumentoPastaStore;
+    pending: PendingActionStore;
+    getDocumento: (assinanteId: string, id: string) => Promise<DocumentoRow | null>;
+    findProcessos: (assinanteId: string, sel: ProcessoSelector) => Promise<ProcessoRow[]>;
+  };
 }
 
 function avisoPontoCego(n: number): string {
@@ -37,7 +63,15 @@ function avisoPontoCego(n: number): string {
   );
 }
 
-/** Descrição curta de um resultado (nome + tipo/assunto/partes, sem inventar). */
+/** Pasta do documento (Passo 18): 📁 processo (cliente) ou 📂 avulso. */
+function pastaDe(d: DocumentoResultado): string {
+  if (!d.processoId) return '📂 avulso';
+  const num = d.processoNumero ? ` ${d.processoNumero}` : '';
+  const cli = d.processoClienteNome ? ` (${d.processoClienteNome})` : '';
+  return `📁 processo${num}${cli}`;
+}
+
+/** Descrição curta de um resultado (nome + tipo/assunto/partes + PASTA, sem inventar). */
 function descreve(d: DocumentoResultado): string {
   const c = d.chaves;
   const detalhes = [c?.tipo, c?.assunto].filter((s): s is string => !!s && s.trim() !== '');
@@ -45,7 +79,16 @@ function descreve(d: DocumentoResultado): string {
   if (partes.length) detalhes.push(partes.slice(0, 3).join(', '));
   const sufixo = detalhes.length ? ` — ${detalhes.join(' · ')}` : '';
   const marca = marcaOcr(d.extracaoStatus); // transparência: conteúdo veio de OCR
-  return `*${d.nome}*${sufixo}${marca ? ` _(${marca})_` : ''}`;
+  return `*${d.nome}*${sufixo}${marca ? ` _(${marca})_` : ''}\n${pastaDe(d)}`;
+}
+
+/** Referência do processo destino → seletor (mesma regra do Passo 15). */
+function selectorDeRef(ref: string): ProcessoSelector {
+  const digits = ref.replace(/\D/g, '');
+  const soNumeros = /^[\d\s./-]+$/.test(ref);
+  if (soNumeros && digits.length === 20) return { numeroCnj: digits };
+  if (soNumeros && digits.length >= 4) return { numeroFragmento: digits };
+  return { clienteNome: ref };
 }
 
 export class DocumentSearchHandler implements IntentHandler {
@@ -64,6 +107,14 @@ export class DocumentSearchHandler implements IntentHandler {
           'ou da parte). Ex.: "acha o contrato do João" ou "resume o contrato do João".',
         cerebro: 'dados',
       };
+    }
+
+    // --- Passo 18: filtros por pasta e mover documento (antes de buscar/resumir) ---
+    if (this.deps.pastas) {
+      const filtro = interpretarFiltroPasta(texto);
+      if (filtro) return this.listarPasta(ctx.assinanteId, filtro);
+      const mover = interpretarMover(texto);
+      if (mover) return this.mover(ctx.assinanteId, mover, ctx);
     }
 
     const pedido = interpretarPedido(texto);
@@ -173,5 +224,137 @@ export class DocumentSearchHandler implements IntentHandler {
       cerebro: 'dados',
       documentosListados: documentos.map((d) => d.id),
     };
+  }
+
+  // --- Passo 18: PASTAS (listar por pasta + mover documento) ---
+
+  private async listarPasta(assinanteId: string, filtro: FiltroPasta): Promise<HandlerResult> {
+    const pastas = this.deps.pastas!;
+    let docs: DocumentoResultado[];
+    let cabecalho: string;
+    if (filtro.tipo === 'avulsos') {
+      docs = await pastas.store.listarPorPasta(assinanteId, { avulsos: true, processoId: null });
+      if (docs.length === 0) {
+        return { replyText: '📂 Você não tem documentos avulsos — está tudo em pastas. 👏', cerebro: 'dados' };
+      }
+      cabecalho = `📂 Documentos avulsos (${docs.length}):`;
+    } else {
+      const procs = await pastas.findProcessos(assinanteId, selectorDeRef(filtro.ref));
+      if (procs.length === 0) {
+        return { replyText: 'Não encontrei esse processo no seu acervo. Confira o número ou o cliente.', cerebro: 'dados' };
+      }
+      if (procs.length > 1) {
+        const lst = procs.map((p, i) => `${i + 1}) ${p.numeroCnj ?? 'processo'}${p.clienteNome ? ` (${p.clienteNome})` : ''}`).join('\n');
+        return { replyText: `Encontrei mais de um processo:\n${lst}\nMe diga o número mais completo.`, cerebro: 'dados' };
+      }
+      const p = procs[0]!;
+      docs = await pastas.store.listarPorPasta(assinanteId, { avulsos: false, processoId: p.id });
+      if (docs.length === 0) {
+        return {
+          replyText: `📁 A pasta do processo ${p.numeroCnj ?? ''} está vazia — nenhum documento vinculado ainda.`,
+          cerebro: 'dados',
+        };
+      }
+      cabecalho = `📁 Documentos do processo ${p.numeroCnj ?? ''}${p.clienteNome ? ` (${p.clienteNome})` : ''} — ${docs.length}:`;
+    }
+    const linhas = await Promise.all(
+      docs.map(async (d, i) => {
+        const url = await this.deps.storage.getSignedUrl(d.storageRef, this.deps.urlTtlSec);
+        return `${i + 1}. ${descreve(d)}\n🔗 ${url}`;
+      }),
+    );
+    return {
+      replyText: `${cabecalho}\n\n${linhas.join('\n\n')}`,
+      cerebro: 'dados',
+      documentosListados: docs.map((d) => d.id),
+    };
+  }
+
+  private async mover(
+    assinanteId: string,
+    pedido: PedidoMover,
+    ctx: MessageContext,
+  ): Promise<HandlerResult> {
+    const pastas = this.deps.pastas!;
+    const lista = ctx.recentContext ? ultimaListaDocumentos(ctx.recentContext.turnos) : [];
+
+    // 1) Resolve o DOCUMENTO (ordinal da última busca ou referência), escopado.
+    let docId: string | null = null;
+    if (pedido.alvo.tipo === 'ordinal') {
+      if (lista.length === 0) {
+        return {
+          replyText: 'Não tenho uma busca recente para saber qual é esse. Busque primeiro (ex.: "acha o contrato do João") e depois peça "move o 2 para a pasta …".',
+          cerebro: 'dados',
+        };
+      }
+      const idx = pedido.alvo.indice === -1 ? lista.length - 1 : pedido.alvo.indice - 1;
+      docId = lista[idx] ?? null;
+      if (!docId) {
+        return {
+          replyText: `Sua última busca listou ${lista.length} documento(s). Diga um número dentro disso.`,
+          cerebro: 'dados',
+        };
+      }
+    } else if (pedido.alvo.termo.trim() === '') {
+      if (lista.length === 1) docId = lista[0]!;
+      else {
+        return { replyText: 'Qual documento você quer mover? Me diga o nome, o número ou o assunto.', cerebro: 'dados' };
+      }
+    } else {
+      const { documentos } = await this.deps.busca.buscar(assinanteId, pedido.alvo.termo);
+      if (documentos.length === 0) {
+        return { replyText: 'Não achei nenhum documento com essa referência para mover.', cerebro: 'dados' };
+      }
+      if (documentos.length > 1) {
+        const lst = documentos.map((d, i) => `${i + 1}. ${descreve(d)}`).join('\n');
+        return {
+          replyText: `Achei ${documentos.length} documentos. Qual deles?\n\n${lst}\n\nResponda, por exemplo, "move o 2 para a mesma pasta".`,
+          cerebro: 'dados',
+          documentosListados: documentos.map((d) => d.id),
+        };
+      }
+      docId = documentos[0]!.id;
+    }
+    // Posse RE-VERIFICADA por tenant (id pode ter vindo da memória).
+    const doc = await pastas.getDocumento(assinanteId, docId);
+    if (!doc) return { replyText: 'Não encontrei mais esse documento.', cerebro: 'dados' };
+
+    // 2) Resolve o DESTINO (processo do tenant, avulso, ou o último consultado).
+    let destino: ProcessoSugestao | null = null; // null = avulso
+    if (pedido.destino.tipo === 'processo') {
+      const procs = await pastas.findProcessos(assinanteId, selectorDeRef(pedido.destino.ref));
+      if (procs.length === 0) {
+        return { replyText: 'Não encontrei esse processo no seu acervo para ser a pasta de destino.', cerebro: 'dados' };
+      }
+      if (procs.length > 1) {
+        const lst = procs.map((p, i) => `${i + 1}) ${p.numeroCnj ?? 'processo'}${p.clienteNome ? ` (${p.clienteNome})` : ''}`).join('\n');
+        return { replyText: `Encontrei mais de um processo de destino:\n${lst}\nMe diga o número mais completo.`, cerebro: 'dados' };
+      }
+      const p = procs[0]!;
+      destino = { id: p.id, numeroCnj: p.numeroCnj, clienteNome: p.clienteNome };
+    } else if (pedido.destino.tipo === 'contexto') {
+      const pid = ctx.recentContext ? ultimoProcessoConsultado(ctx.recentContext.turnos) : null;
+      if (!pid) {
+        return {
+          replyText: 'Pasta de quem? Me diga o processo (número ou cliente) — ou consulte a ficha dele antes.',
+          cerebro: 'dados',
+        };
+      }
+      const p = await pastas.store.getProcessoPastaById(assinanteId, pid); // posse re-verificada
+      if (!p) return { replyText: 'Não encontrei mais esse processo no seu acervo.', cerebro: 'dados' };
+      destino = p;
+    } else if (doc.processoId === null) {
+      return { replyText: `*${doc.nome}* já está avulso (fora de pasta). 👍`, cerebro: 'dados' };
+    }
+
+    // 3) CONFIRMAÇÃO sempre (mover é escrita); a execução re-verifica tudo de novo.
+    await pastas.pending.save(assinanteId, {
+      acao: 'mover_documento',
+      params: { docId, processoId: destino?.id ?? null },
+      fase: 'confirmando',
+      faltando: [],
+    });
+    const para = destino ? `📁 pasta do ${rotuloSugestao(destino)}` : '📂 avulso (fora de pasta)';
+    return { replyText: `Movo *${doc.nome}* → ${para}? Responda *SIM* para confirmar.`, cerebro: 'dados' };
   }
 }

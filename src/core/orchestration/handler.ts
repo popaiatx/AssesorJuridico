@@ -30,6 +30,11 @@ export interface HandlerResult {
    * orquestrador os guarda na memória para resolver "resume o segundo" depois.
    */
   documentosListados?: string[];
+  /**
+   * Ids dos processos consultados/exibidos nesta resposta (Passo 18 — ex.: a
+   * ficha), para a memória resolver "guarda na pasta dele". Contrato dos docIds.
+   */
+  processosListados?: string[];
 }
 
 export interface IntentHandler {

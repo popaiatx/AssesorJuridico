@@ -177,6 +177,10 @@ export class Orchestrator {
     if (handled.documentosListados && handled.documentosListados.length > 0) {
       assistant.docIds = handled.documentosListados;
     }
+    // 18: idem para processos ("guarda na pasta dele" → última ficha consultada).
+    if (handled.processosListados && handled.processosListados.length > 0) {
+      assistant.processoIds = handled.processosListados;
+    }
     const novos: ConversationTurn[] = [{ papel: 'user', intent, em }, assistant];
     const turnos = trimTurnos([...anteriores, ...novos], cfg.turnos);
     await memory.save(assinanteId, turnos);

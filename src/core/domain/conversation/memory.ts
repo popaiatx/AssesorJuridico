@@ -58,3 +58,12 @@ export function ultimaListaDocumentos(turnos: ConversationTurn[]): string[] {
   }
   return [];
 }
+
+/** Último processo consultado/exibido (Passo 18: "guarda na pasta DELE"). */
+export function ultimoProcessoConsultado(turnos: ConversationTurn[]): string | null {
+  for (let i = turnos.length - 1; i >= 0; i--) {
+    const ids = turnos[i]!.processoIds;
+    if (ids && ids.length > 0) return ids[0]!;
+  }
+  return null;
+}
