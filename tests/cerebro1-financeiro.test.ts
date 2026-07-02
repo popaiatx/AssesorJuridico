@@ -459,6 +459,27 @@ describe('consultar_financeiro (leitura determinística)', () => {
   });
 });
 
+describe('guard de pendência alheia (Passo 18 — colisão entre handlers)', () => {
+  it('pendência de OUTRO handler (vincular_documento) → descarta e segue como pedido novo', async () => {
+    const fin = new TenantFinStore();
+    fin.seed('A', parcela({}));
+    const { handler, pending } = build(
+      (p) => (p.tools ? tool('consultar_financeiro', {}) : tool('x', {})),
+      new TenantStore(),
+      fin,
+    );
+    await pending.save('A', {
+      acao: 'vincular_documento', // não é do Cérebro 1
+      params: { docId: 'd1', processoId: 'p1' },
+      fase: 'confirmando',
+      faltando: [],
+    });
+    const r = await handler.handle(ctx('o que tenho a receber?'));
+    expect(r.replyText).toContain('A receber'); // processou o pedido novo…
+    expect(await pending.get('A')).toBeNull(); // …e limpou a pendência alheia
+  });
+});
+
 describe('ISOLAMENTO A×B (financeiro)', () => {
   it('a consulta de A nunca contém parcela de B (números e clientes similares)', async () => {
     const fin = new TenantFinStore();

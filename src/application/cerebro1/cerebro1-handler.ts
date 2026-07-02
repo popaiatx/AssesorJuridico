@@ -119,7 +119,14 @@ export class Cerebro1Handler implements IntentHandler {
 
     const text = ctx.message.text ?? '';
     const norm = normalizeText(text);
-    const pend = await this.deps.pending.get(assinanteId);
+    let pend = await this.deps.pending.get(assinanteId);
+
+    // Pendência de OUTRO handler (ex.: vincular/mover documento do Passo 18) não é
+    // nossa: descarta e segue como pedido novo (defesa de colisão entre handlers).
+    if (pend && !ACTIONS_BY_NAME[pend.acao]) {
+      await this.deps.pending.clear(assinanteId);
+      pend = null;
+    }
 
     if (pend?.fase === 'confirmando') {
       if (isAffirmative(norm)) {

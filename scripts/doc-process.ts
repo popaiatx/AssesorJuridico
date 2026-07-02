@@ -8,6 +8,10 @@
  *
  * --acao: resumir | salvar | ambos (default: ambos). O bucket "documentos" precisa
  * existir (privado) no Supabase. O download da mídia do WhatsApp fica para o chip.
+ *
+ * --responder "<texto>" (Passo 18): simula o TURNO SEGUINTE pelo MESMO caminho da
+ * interceptação do produto (handleDecision) — para validar a sugestão de pasta
+ * ("sim" vincula, "não" mantém avulso, número resolve a desambiguação) sem chip.
  */
 import { readFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
@@ -28,6 +32,7 @@ const arquivo = positionais[0];
 const acaoArg = (flag('--acao') ?? 'ambos') as 'resumir' | 'salvar' | 'ambos';
 const telefone = flag('--telefone');
 const processo = flag('--processo') ?? null;
+const responder = flag('--responder') ?? null;
 
 if (!arquivo || !telefone || !['resumir', 'salvar', 'ambos'].includes(acaoArg)) {
   console.error('Uso: npm run doc:process -- <arquivo> --telefone <telefone> [--acao resumir|salvar|ambos] [--processo <CNJ>]');
@@ -61,6 +66,10 @@ const { createEmbeddingsAdapter } = await import('../src/adapters/embeddings/fac
 const { getOcrConfig } = await import('../src/adapters/ocr/config.js');
 const { createOcrAdapter } = await import('../src/adapters/ocr/factory.js');
 const { DocumentoService } = await import('../src/application/documentos/documento-service.js');
+const { DocumentHandler } = await import('../src/application/documentos/document-handler.js');
+const { supabaseDocumentoPastaStore } = await import('../src/adapters/documentos/supabase-pasta-store.js');
+const { supabasePendingStore } = await import('../src/adapters/cerebro1/supabase-cerebro1-store.js');
+const { normalizeText } = await import('../src/core/domain/validators.js');
 const { config } = await import('../src/infra/config/index.js');
 const { closeDatabase } = await import('../src/infra/db/tenant.js');
 
@@ -88,6 +97,7 @@ try {
       ...(ocr && ocrCfg ? { ocr, ocrMinConfianca: ocrCfg.minConfianca, ocrMaxPaginas: ocrCfg.maxPaginas } : {}),
       maxBytes: config.DOCUMENTOS_MAX_MB * 1024 * 1024,
       resolveProcessoId: resolveProcessoIdByCnj,
+      pastas: { store: supabaseDocumentoPastaStore, pending: supabasePendingStore },
       logger: { error: (o, m) => console.error('[doc][erro]', m ?? '', o) },
     });
 
@@ -104,6 +114,24 @@ try {
     console.log('─'.repeat(60));
     console.log(reply);
     console.log('─'.repeat(60));
+
+    if (responder) {
+      // Turno seguinte pelo MESMO caminho do produto (interceptação pré-classificação).
+      const handler = new DocumentHandler({
+        service,
+        store: {
+          inserir: docsStore.inserirDocumento,
+          gravarConteudo: docsStore.gravarConteudoDocumento,
+          getById: docsStore.getDocumentoById,
+          pendenteDecisao: docsStore.documentoPendenteDecisao,
+          remover: docsStore.removerDocumento,
+        },
+        pending: supabasePendingStore,
+      });
+      console.log(`\n👤 Você: ${responder}`);
+      const r2 = await handler.handleDecision(assinanteId, normalizeText(responder));
+      console.log(`🤖 estagiárIA: ${r2 ?? '(sem pendência — a mensagem seguiria o fluxo normal)'}`);
+    }
   }
 } catch (err) {
   // Mensagem limpa (não despeja stack): erros conhecidos já vêm explicados.

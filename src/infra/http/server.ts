@@ -53,6 +53,7 @@ import { supabaseStorage } from '../../adapters/storage/supabase-storage.js';
 import { WhatsappMediaDownloader } from '../../adapters/whatsapp/whatsapp-media-downloader.js';
 import { DocumentoService } from '../../application/documentos/documento-service.js';
 import { DocumentHandler } from '../../application/documentos/document-handler.js';
+import { supabaseDocumentoPastaStore } from '../../adapters/documentos/supabase-pasta-store.js';
 import { BuscarDocumentos } from '../../application/documentos/buscar-documentos.js';
 import { ResumirDocumento } from '../../application/documentos/resumir-documento.js';
 import { DocumentSearchHandler } from '../../application/documentos/document-search-handler.js';
@@ -183,9 +184,15 @@ function registerWhatsapp(app: FastifyInstance): void {
           : {}),
         maxBytes: config.DOCUMENTOS_MAX_MB * 1024 * 1024,
         resolveProcessoId: resolveProcessoIdByCnj,
+        // Pastas (Passo 18): sugestão de vínculo + mover (pendência por tenant).
+        pastas: { store: supabaseDocumentoPastaStore, pending: supabasePendingStore },
         logger: app.log,
       });
-      const docHandler = new DocumentHandler({ service: docService, store: docStore });
+      const docHandler = new DocumentHandler({
+        service: docService,
+        store: docStore,
+        pending: supabasePendingStore,
+      });
       documentDecision = (id, text) => docHandler.handleDecision(id, normalizeText(text));
       incomingDocument = async (id, message) => {
         const wcfg = getWhatsappConfig();

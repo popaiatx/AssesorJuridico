@@ -15,7 +15,16 @@ import type { ExtracaoResultado } from '../../adapters/documentos/extractors.js'
 import { AVISO, DISCLAIMER_RESUMO, ehOcr, temTexto } from '../../core/domain/documentos/formato.js';
 import type { DocAcao } from '../../core/domain/documentos/decisao.js';
 import { PERGUNTA_DECISAO } from '../../core/domain/documentos/decisao.js';
-import type { DocumentoStore } from '../../core/ports/documentos.js';
+import type { DocumentoPastaStore, DocumentoStore, KeyInfo } from '../../core/ports/documentos.js';
+import type { PendingActionStore } from '../../core/ports/cerebro1.js';
+import {
+  avisoCnjSemDono,
+  cnjForte,
+  numerosCandidatos,
+  perguntaSugestao,
+  perguntaSugestaoMultipla,
+  rotuloSugestao,
+} from '../../core/domain/documentos/sugestao-pasta.js';
 import type { EmbeddingsPort } from '../../core/ports/embeddings.js';
 import type { LlmPort } from '../../core/ports/llm.js';
 import type { OcrPort } from '../../core/ports/ocr.js';
@@ -58,6 +67,9 @@ export interface DocumentoServiceDeps {
   ocrMinConfianca?: number;
   ocrMaxPaginas?: number;
   resolveProcessoId: (assinanteId: string, numeroCnj: string) => Promise<string | null>;
+  /** Pastas (Passo 18): sugestão de vínculo por match determinístico + mover.
+   *  Ausente → nenhum comportamento novo (fluxo 12A intocado). */
+  pastas?: { store: DocumentoPastaStore; pending: PendingActionStore };
   extrair?: (bytes: Uint8Array, filename: string, ct: string | null) => Promise<ExtracaoResultado>;
   novoId?: () => string;
   logger: Logger;
@@ -151,7 +163,7 @@ export class DocumentoService {
       legenda: entrada.legenda ?? null,
       status: 'guardado',
     });
-    return this.finalizarGuarda(assinanteId, id, ex, acao, avisoProc);
+    return this.finalizarGuarda(assinanteId, id, ex, acao, avisoProc, processoId);
   }
 
   /** Ação desconhecida: sobe o arquivo (staging) e pergunta 1/2/3. */
@@ -203,7 +215,7 @@ export class DocumentoService {
         : `${ex.aviso ?? AVISO.falha}\n\n(Não guardei no acervo.)`;
     }
     // salvar | ambos: promove o staging a guardado (com ou sem chaves)
-    return this.finalizarGuarda(assinanteId, docId, ex, acao, '');
+    return this.finalizarGuarda(assinanteId, docId, ex, acao, '', row.processoId);
   }
 
   /** Grava chaves/resumo (ou marca sem_texto) e devolve a resposta ao usuário. */
@@ -213,6 +225,8 @@ export class DocumentoService {
     ex: ExtracaoResultado,
     acao: DocAcao,
     avisoProc: string,
+    processoIdAtual: string | null = null,
+    comSugestao = true,
   ): Promise<string> {
     if (!temTexto(ex.status)) {
       await this.deps.store.gravarConteudo(assinanteId, docId, {
@@ -236,9 +250,86 @@ export class DocumentoService {
       embedding,
     });
     const tipo = chaves.tipo ? ` (${chaves.tipo})` : '';
-    const guardei = `📎 Guardei no seu acervo${tipo}${avisoProc}.`;
+    // Passo 18: sugestão de pasta — só quando ficou SEM vínculo (legenda explícita
+    // tem precedência) e há texto. O match é determinístico e escopado por tenant;
+    // sugerir NUNCA vincula sozinho (o usuário decide no turno seguinte).
+    const sugestao = comSugestao
+      ? await this.sugerirPasta(assinanteId, docId, chaves, processoIdAtual)
+      : { avisoInline: '', pergunta: '' };
+    const guardei = `📎 Guardei no seu acervo${tipo}${avisoProc}${sugestao.avisoInline}.`;
     const corpo = resumo ? `${resumo}\n\n${DISCLAIMER}\n\n${guardei}` : guardei;
-    return corpo + this.notaOcr(ex); // transparência: avisa quando o texto veio de OCR
+    return corpo + this.notaOcr(ex) + sugestao.pergunta;
+  }
+
+  /** Match determinístico da sugestão. Falha aqui NUNCA perde a guarda (loga e segue). */
+  private async sugerirPasta(
+    assinanteId: string,
+    docId: string,
+    chaves: KeyInfo | null,
+    processoIdAtual: string | null,
+  ): Promise<{ avisoInline: string; pergunta: string }> {
+    const nada = { avisoInline: '', pergunta: '' };
+    const pastas = this.deps.pastas;
+    if (!pastas || processoIdAtual) return nada;
+    try {
+      const numeros = numerosCandidatos(chaves);
+      if (numeros.length === 0) return nada;
+      const procs = await pastas.store.findProcessosPorNumeros(assinanteId, numeros);
+      if (procs.length === 1) {
+        const p = procs[0]!;
+        await pastas.pending.save(assinanteId, {
+          acao: 'vincular_documento',
+          params: { docId, processoId: p.id, rotulo: rotuloSugestao(p) },
+          fase: 'confirmando',
+          faltando: [],
+        });
+        return { avisoInline: '', pergunta: `\n\n${perguntaSugestao(p)}` };
+      }
+      if (procs.length > 1) {
+        await pastas.pending.save(assinanteId, {
+          acao: 'vincular_documento',
+          params: {
+            docId,
+            _candidatos: procs.map((p) => ({ id: p.id, label: rotuloSugestao(p) })),
+          },
+          fase: 'desambiguando',
+          faltando: [],
+        });
+        return { avisoInline: '', pergunta: `\n\n${perguntaSugestaoMultipla(procs)}` };
+      }
+      const forte = cnjForte(numeros);
+      return forte ? { avisoInline: avisoCnjSemDono(forte), pergunta: '' } : nada;
+    } catch (err) {
+      this.deps.logger.error({ err, docId }, 'documentos: falha na sugestão de pasta (segue sem)');
+      return nada;
+    }
+  }
+
+  /**
+   * Vincula (ou solta, com processoId null) um documento JÁ guardado (Passo 18).
+   * SÓ o processo_id muda — chaves/resumo/embedding intactos. ISOLAMENTO: posse do
+   * DOCUMENTO e do PROCESSO re-verificadas por tenant aqui, na execução (id vindo
+   * de pendência/memória nunca é confiado às cegas); FK composta de backstop.
+   */
+  async vincularPasta(
+    assinanteId: string,
+    docId: string,
+    processoId: string | null,
+  ): Promise<string> {
+    const pastas = this.deps.pastas;
+    if (!pastas) return 'As pastas de documentos não estão disponíveis neste ambiente.';
+    const doc = await this.deps.store.getById(assinanteId, docId); // posse do doc
+    if (!doc) return 'Não encontrei mais esse documento.';
+    if (processoId === null) {
+      const ok = await pastas.store.setProcessoId(assinanteId, docId, null);
+      return ok ? `📂 Pronto: *${doc.nome}* agora está avulso (fora de pasta).` : 'Não consegui mover esse documento.';
+    }
+    const proc = await pastas.store.getProcessoPastaById(assinanteId, processoId); // posse do processo
+    if (!proc) return 'Não encontrei esse processo no seu acervo.';
+    const ok = await pastas.store.setProcessoId(assinanteId, docId, proc.id);
+    return ok
+      ? `📁 Pronto: *${doc.nome}* está na pasta do ${rotuloSugestao(proc)}.`
+      : 'Não consegui mover esse documento.';
   }
 
   /**
@@ -270,8 +361,9 @@ export class DocumentoService {
     if (!temTexto(ex.status)) {
       return { ok: false, status: 'sem_texto', mensagem: ex.aviso ?? 'segue sem texto legível' };
     }
-    // Reaproveita o pipeline normal (chaves + resumo + embedding), persistindo o status OCR.
-    await this.finalizarGuarda(assinanteId, docId, ex, 'ambos', '');
+    // Reaproveita o pipeline normal (chaves + resumo + embedding), persistindo o status
+    // OCR. SEM sugestão de pasta: é um lote offline — pendência silenciosa confundiria.
+    await this.finalizarGuarda(assinanteId, docId, ex, 'ambos', '', row.processoId, false);
     return { ok: true, status: ex.status, mensagem: `OCR aplicado (${ex.status})` };
   }
 
