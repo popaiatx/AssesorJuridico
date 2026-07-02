@@ -70,7 +70,7 @@ export async function applyAsaasEvent(input: ApplyAsaasEventInput): Promise<bool
     select app.apply_asaas_event(
       ${input.gatewayEventId}, ${input.assinanteId}, ${input.tipo},
       ${input.novoStatus}::assinatura_status, ${input.proximoVencimento}::date,
-      ${JSON.stringify(input.payload)}::jsonb
+      ${input.payload as never}::jsonb
     ) as applied
   `;
   return rows[0]?.applied ?? false;

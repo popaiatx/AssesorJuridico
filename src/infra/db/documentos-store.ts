@@ -3,6 +3,7 @@
  * sem service_role). O service_role só toca o ARQUIVO no Storage; "de quem é o
  * documento" é decidido AQUI (RLS). O `assinante_id` vem sempre da identidade.
  */
+import { jsonbParse } from './jsonb.js';
 import { pool } from './pool.js';
 import { withTenant } from './tenant.js';
 import type {
@@ -37,7 +38,7 @@ function toRow(r: DbDoc): DocumentoRow {
     tipo: r.tipo,
     storageRef: r.storage_ref,
     processoId: r.processo_id,
-    chaves: r.chaves ?? null,
+    chaves: jsonbParse<KeyInfo | null>(r.chaves, null),
     resumo: r.resumo,
     extracaoStatus: (r.extracao_status as ExtracaoStatus) ?? 'ok',
     status: r.status,
@@ -64,7 +65,7 @@ export async function gravarConteudoDocumento(
   return withTenant(assinanteId, async (tx) => {
     const rows = await tx<{ id: string }[]>`
       update documentos set
-        chaves = ${c.chaves === null ? null : JSON.stringify(c.chaves)}::jsonb,
+        chaves = ${c.chaves as never}::jsonb,
         resumo = ${c.resumo},
         extracao_status = ${c.extracaoStatus},
         busca_texto = ${c.buscaTexto},

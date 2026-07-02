@@ -4,6 +4,7 @@
  * pool (as tabelas são travadas; sem service_role no caminho da mensagem).
  */
 import { pool } from './pool.js';
+import { jsonbParse } from './jsonb.js';
 
 export interface OnboardingEstadoRow {
   etapa: string;
@@ -15,7 +16,9 @@ export async function getOnboardingEstado(phone: string): Promise<OnboardingEsta
   const rows = await pool<{ estado: OnboardingEstadoRow | null }[]>`
     select app.get_onboarding_estado(${phone}) as estado
   `;
-  return rows[0]?.estado ?? null;
+  const estado = rows[0]?.estado ?? null;
+  if (!estado) return null;
+  return { etapa: estado.etapa, dados: jsonbParse(estado.dados, {}) };
 }
 
 export async function upsertOnboardingEstado(
@@ -24,7 +27,7 @@ export async function upsertOnboardingEstado(
   dados: Record<string, unknown>,
 ): Promise<void> {
   await pool`
-    select app.upsert_onboarding_estado(${phone}, ${etapa}, ${JSON.stringify(dados)}::jsonb)
+    select app.upsert_onboarding_estado(${phone}, ${etapa}, ${dados as never}::jsonb)
   `;
 }
 

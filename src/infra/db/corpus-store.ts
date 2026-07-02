@@ -180,7 +180,7 @@ export async function finishSyncRun(id: string, r: SyncRunResult): Promise<void>
       normas_verificadas = ${r.normasVerificadas},
       normas_atualizadas = ${r.normasAtualizadas},
       normas_revogadas = ${r.normasRevogadas},
-      erros = ${JSON.stringify(r.erros)}::jsonb
+      erros = ${r.erros as never}::jsonb
     where id = ${id}
   `;
 }

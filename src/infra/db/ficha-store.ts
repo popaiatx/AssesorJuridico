@@ -104,9 +104,19 @@ export async function getFichaBruta(
 
     // 4) Financeiro do processo (do tenant) — slot real desde já (Passo 16 preenche).
     const lancs = await tx<
-      Array<{ id: string; tipo: string; valor: string; vencimento: string | null; status: string }>
+      Array<{
+        id: string;
+        tipo: string;
+        valor: string;
+        vencimento: string | null;
+        status: string;
+        parcela: number | null;
+        total_parcelas: number | null;
+        descricao: string | null;
+      }>
     >`
-      select id, tipo::text, valor::text, vencimento::text, status::text
+      select id, tipo::text, valor::text, vencimento::text, status::text,
+             parcela, total_parcelas, descricao
       from lancamentos_financeiros
       where assinante_id = ${assinanteId} and processo_id = ${processoId}
       order by vencimento asc nulls last, criado_em asc
@@ -118,6 +128,9 @@ export async function getFichaBruta(
       valor: r.valor,
       vencimento: r.vencimento,
       status: r.status,
+      parcela: r.parcela,
+      totalParcelas: r.total_parcelas,
+      descricao: r.descricao,
     }));
 
     return { processo, compromissos, documentos, lancamentos };

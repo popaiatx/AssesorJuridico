@@ -4,6 +4,7 @@
  * sempre da identidade; nunca de texto/parâmetro do LLM.
  */
 import { withTenant } from './tenant.js';
+import { jsonbParse } from './jsonb.js';
 import type {
   CompromissoAlvo,
   CompromissoPatch,
@@ -380,7 +381,7 @@ export async function getPendingAction(assinanteId: string): Promise<PendingActi
     if (!r) return null;
     const fase =
       r.fase === 'confirmando' ? 'confirmando' : r.fase === 'desambiguando' ? 'desambiguando' : 'coletando';
-    return { acao: r.acao, params: r.params, fase, faltando: r.faltando };
+    return { acao: r.acao, params: jsonbParse(r.params, {}), fase, faltando: r.faltando };
   });
 }
 
@@ -391,7 +392,7 @@ export async function savePendingAction(
   await withTenant(assinanteId, async (tx) => {
     await tx`
       insert into acoes_pendentes (assinante_id, acao, params, fase, faltando)
-      values (${assinanteId}, ${pending.acao}, ${JSON.stringify(pending.params)}::jsonb,
+      values (${assinanteId}, ${pending.acao}, ${pending.params as never}::jsonb,
               ${pending.fase}, ${pending.faltando})
       on conflict (assinante_id) do update
         set acao = excluded.acao, params = excluded.params,

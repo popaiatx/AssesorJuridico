@@ -3,6 +3,7 @@
  * sem service_role). O `assinanteId` vem sempre da identidade autenticada, nunca de
  * texto do usuário. O isolamento entre assinantes é garantido pelo RLS (force).
  */
+import { jsonbParse } from './jsonb.js';
 import { withTenant } from './tenant.js';
 import type {
   ConversationMemoryStore,
@@ -19,7 +20,7 @@ export const conversationMemoryStore: ConversationMemoryStore = {
       const r = rows[0];
       if (!r) return { turnos: [], atualizadoEm: null };
       return {
-        turnos: Array.isArray(r.turnos) ? r.turnos : [],
+        turnos: jsonbParse<ConversationTurn[]>(r.turnos, []),
         atualizadoEm: new Date(r.atualizado_em).toISOString(),
       };
     });
@@ -29,7 +30,7 @@ export const conversationMemoryStore: ConversationMemoryStore = {
     return withTenant(assinanteId, async (tx) => {
       await tx`
         insert into conversa_memoria (assinante_id, turnos)
-        values (${assinanteId}, ${JSON.stringify(turnos)}::jsonb)
+        values (${assinanteId}, ${turnos as never}::jsonb)
         on conflict (assinante_id) do update set turnos = excluded.turnos
       `;
     });
