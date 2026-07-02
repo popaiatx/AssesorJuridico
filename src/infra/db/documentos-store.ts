@@ -13,6 +13,7 @@ import type {
   ExtracaoStatus,
   KeyInfo,
   NovoDocumento,
+  ProcessoPastaRef,
 } from '../../core/ports/documentos.js';
 
 function vectorLiteral(embedding: number[]): string {
@@ -142,9 +143,13 @@ export async function buscarDocumentosExato(
 ): Promise<DocumentoResultado[]> {
   if (termos.length === 0) return [];
   return withTenant(assinanteId, async (tx) => {
-    const rows = await tx<DbDoc[]>`
-      select id, nome, tipo, storage_ref, processo_id, chaves, resumo, extracao_status, status
+    const rows = await tx<DbDocComPasta[]>`
+      select d.id, d.nome, d.tipo, d.storage_ref, d.processo_id, d.chaves, d.resumo,
+             d.extracao_status, d.status,
+             pr.numero_cnj as processo_numero, cl.nome as processo_cliente
       from documentos d
+      left join processos pr on pr.id = d.processo_id
+      left join clientes cl on cl.id = pr.cliente_id
       where d.assinante_id = ${assinanteId}
         and d.status = 'guardado'
         and exists (
@@ -157,7 +162,7 @@ export async function buscarDocumentosExato(
       ) desc, d.enviado_em desc
       limit ${limite}
     `;
-    return rows.map(toRow);
+    return rows.map(toRowComPasta);
   });
 }
 
@@ -169,17 +174,21 @@ export async function buscarDocumentosSemantico(
 ): Promise<DocumentoResultado[]> {
   const vec = vectorLiteral(embedding);
   return withTenant(assinanteId, async (tx) => {
-    const rows = await tx<(DbDoc & { similarity: number })[]>`
-      select id, nome, tipo, storage_ref, processo_id, chaves, resumo, extracao_status, status,
-             1 - (embedding <=> ${vec}::vector) as similarity
-      from documentos
-      where assinante_id = ${assinanteId}
-        and status = 'guardado'
-        and embedding is not null
-      order by embedding <=> ${vec}::vector
+    const rows = await tx<(DbDocComPasta & { similarity: number })[]>`
+      select d.id, d.nome, d.tipo, d.storage_ref, d.processo_id, d.chaves, d.resumo,
+             d.extracao_status, d.status,
+             pr.numero_cnj as processo_numero, cl.nome as processo_cliente,
+             1 - (d.embedding <=> ${vec}::vector) as similarity
+      from documentos d
+      left join processos pr on pr.id = d.processo_id
+      left join clientes cl on cl.id = pr.cliente_id
+      where d.assinante_id = ${assinanteId}
+        and d.status = 'guardado'
+        and d.embedding is not null
+      order by d.embedding <=> ${vec}::vector
       limit ${limite}
     `;
-    return rows.map((r) => ({ ...toRow(r), similarity: Number(r.similarity) }));
+    return rows.map((r) => ({ ...toRowComPasta(r), similarity: Number(r.similarity) }));
   });
 }
 
@@ -191,6 +200,95 @@ export async function contarDocumentosSemTexto(assinanteId: string): Promise<num
       where assinante_id = ${assinanteId} and status = 'guardado' and extracao_status = 'sem_texto'
     `;
     return rows[0]?.n ?? 0;
+  });
+}
+
+// --- Passo 18: documentos em PASTAS (vínculo = metadado; escopado por tenant) ---
+
+type DbDocComPasta = DbDoc & { processo_numero: string | null; processo_cliente: string | null };
+
+function toRowComPasta(r: DbDocComPasta): DocumentoResultado {
+  return { ...toRow(r), processoNumero: r.processo_numero, processoClienteNome: r.processo_cliente };
+}
+
+/** Processos DO TENANT cujo numero_cnj contém algum dos números extraídos.
+ *  Match determinístico da sugestão de pasta — nunca cruza tenants. */
+export async function findProcessosPorNumeros(
+  assinanteId: string,
+  numeros: string[],
+): Promise<ProcessoPastaRef[]> {
+  if (numeros.length === 0) return [];
+  const patterns = numeros.map((n) => `%${n}%`);
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<{ id: string; numero_cnj: string | null; cliente_nome: string | null }[]>`
+      select distinct p.id, p.numero_cnj, c.nome as cliente_nome, p.criado_em
+      from processos p
+      left join clientes c on c.id = p.cliente_id
+      where p.assinante_id = ${assinanteId}
+        and p.numero_cnj is not null
+        and exists (select 1 from unnest(${patterns}::text[]) pat where p.numero_cnj like pat)
+      order by p.criado_em desc
+      limit 5
+    `;
+    return rows.map((r) => ({ id: r.id, numeroCnj: r.numero_cnj, clienteNome: r.cliente_nome }));
+  });
+}
+
+/** Re-verifica a posse do processo destino por tenant (null = não é do dono). */
+export async function getProcessoPastaById(
+  assinanteId: string,
+  processoId: string,
+): Promise<ProcessoPastaRef | null> {
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<{ id: string; numero_cnj: string | null; cliente_nome: string | null }[]>`
+      select p.id, p.numero_cnj, c.nome as cliente_nome
+      from processos p
+      left join clientes c on c.id = p.cliente_id
+      where p.assinante_id = ${assinanteId} and p.id = ${processoId}
+    `;
+    const r = rows[0];
+    return r ? { id: r.id, numeroCnj: r.numero_cnj, clienteNome: r.cliente_nome } : null;
+  });
+}
+
+/** Vincula/solta o documento do tenant. SÓ o processo_id muda (nada é
+ *  reprocessado); a FK composta barra processo de outro dono no próprio banco. */
+export async function setDocumentoProcessoId(
+  assinanteId: string,
+  docId: string,
+  processoId: string | null,
+): Promise<boolean> {
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<{ id: string }[]>`
+      update documentos set processo_id = ${processoId}
+      where id = ${docId} and assinante_id = ${assinanteId} and status = 'guardado'
+      returning id
+    `;
+    return rows.length > 0;
+  });
+}
+
+/** Documentos guardados por pasta: avulsos OU de um processo específico. */
+export async function listarDocumentosPorPasta(
+  assinanteId: string,
+  filtro: { avulsos: boolean; processoId: string | null },
+): Promise<DocumentoResultado[]> {
+  return withTenant(assinanteId, async (tx) => {
+    const rows = await tx<DbDocComPasta[]>`
+      select d.id, d.nome, d.tipo, d.storage_ref, d.processo_id, d.chaves, d.resumo,
+             d.extracao_status, d.status,
+             pr.numero_cnj as processo_numero, cl.nome as processo_cliente
+      from documentos d
+      left join processos pr on pr.id = d.processo_id
+      left join clientes cl on cl.id = pr.cliente_id
+      where d.assinante_id = ${assinanteId}
+        and d.status = 'guardado'
+        and (${filtro.avulsos}::boolean is false or d.processo_id is null)
+        and (${filtro.processoId}::uuid is null or d.processo_id = ${filtro.processoId}::uuid)
+      order by d.enviado_em desc
+      limit 20
+    `;
+    return rows.map(toRowComPasta);
   });
 }
 

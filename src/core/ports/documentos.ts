@@ -58,9 +58,40 @@ export interface DocumentoRow {
   status: string;
 }
 
-/** Resultado de busca: o documento + (no semântico) a similaridade. */
+/** Resultado de busca: o documento + (no semântico) a similaridade.
+ *  Passo 18: carrega a PASTA (nº do processo + cliente) para exibição. */
 export interface DocumentoResultado extends DocumentoRow {
   similarity?: number;
+  processoNumero?: string | null;
+  processoClienteNome?: string | null;
+}
+
+// --- Passo 18: documentos em pastas ---
+
+export interface ProcessoPastaRef {
+  id: string;
+  numeroCnj: string | null;
+  clienteNome: string | null;
+}
+
+/**
+ * Pastas (Passo 18). O vínculo é METADADO: vincular/mover NUNCA reprocessa o
+ * documento (chaves/resumo/embedding intactos). Tudo escopado por tenant; a FK
+ * composta (processo_id, assinante_id) garante no banco que documento não
+ * aponta para processo de outro dono, mesmo se toda camada acima falhar.
+ */
+export interface DocumentoPastaStore {
+  /** Processos DO TENANT cujo numero_cnj contém algum dos números extraídos. */
+  findProcessosPorNumeros(assinanteId: string, numeros: string[]): Promise<ProcessoPastaRef[]>;
+  /** Re-verifica a posse do processo destino por tenant. */
+  getProcessoPastaById(assinanteId: string, processoId: string): Promise<ProcessoPastaRef | null>;
+  /** Vincula (ou solta, com null) o documento do tenant. Só o processo_id muda. */
+  setProcessoId(assinanteId: string, docId: string, processoId: string | null): Promise<boolean>;
+  /** Lista documentos guardados por pasta: avulsos OU de um processo. */
+  listarPorPasta(
+    assinanteId: string,
+    filtro: { avulsos: boolean; processoId: string | null },
+  ): Promise<DocumentoResultado[]>;
 }
 
 /**
