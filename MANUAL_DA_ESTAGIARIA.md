@@ -83,6 +83,12 @@ datas, assunto) para você **encontrar o documento depois**.
 - Você manda um PDF com a legenda *"resume isso"* → ela responde com o resumo.
 - Você manda um arquivo **sem dizer nada** → ela pergunta: *"O que você quer fazer? 1 - Resumir / 2 - Salvar / 3 - Resumir e salvar"* e age conforme a sua resposta.
 - Você manda um contrato com *"guarda no processo 0001234-…"* → ela guarda vinculado ao processo.
+- **Organização automática — com a sua permissão:** se o documento **menciona** um
+  processo que já está no seu acervo, ela reconhece e **sugere** (diálogo real):
+  > 📎 Guardei no seu acervo (procuração ad judicia).
+  >
+  > 📁 Esse documento menciona o processo 0009876-… (cliente Gabriel Machado) — guardo na pasta dele? (responda *sim* ou *não*)
+  Você responde **"sim"** e pronto: *"📁 Pronto: procuracao-gabriel.pdf está na pasta do processo… (cliente Gabriel Machado)."* Se responder **"não"** (ou simplesmente seguir falando de outra coisa), o documento fica avulso — **ela sugere, nunca decide sozinha**. E se o número mencionado **não existir** no seu acervo, ela é honesta: *"(li o nº … no documento, mas não achei esse processo no seu acervo — guardei avulso)"*.
 - Se for **foto ou PDF escaneado**, ela agora **lê o texto por reconhecimento de imagem (OCR)** — tudo **dentro do nosso ambiente** (o documento não é enviado a terceiros). Assim ela consegue resumir e indexar até um documento escaneado. Como OCR pode errar (sobretudo números), ela **avisa** que aquele conteúdo veio de OCR e pede conferência. Se a imagem estiver ruim demais para ler com segurança, ela é honesta: guarda o arquivo, avisa que só leu parcialmente e **não registra dados incertos** (melhor vazio que errado).
 
 **Bom saber:**
@@ -193,6 +199,23 @@ sempre **para você**; a estagiárIA **nunca cobra o seu cliente** diretamente.
 - *"Todo dia 31"* em mês sem dia 31 cai no **último dia do mês** (fevereiro: 28/29) — e volta ao 31 no mês seguinte.
 - A **ficha do processo** mostra o resumo do financeiro (pagas, pendentes, atrasadas e a próxima a vencer).
 
+### 11. Pastas de documentos (mover e organizar)
+**O que faz:** cada processo funciona como uma **pasta** — e você organiza por
+conversa, sem menu. A busca sempre mostra **onde** cada documento está: *"📁 processo
+0001234-… (Gabriel)"* ou *"📂 avulso"*.
+
+**Exemplos:**
+- Você: *"move a procuração do Gabriel para a pasta do processo 12345"*
+  Ela: *"Movo procuracao-gabriel.pdf → 📁 pasta do processo 0001234-… (cliente Maria Silva)? Responda SIM"* — e só move com o seu **"sim"**.
+- Depois de uma busca que listou vários: *"move o 2 para a pasta do Gabriel"*.
+- Logo depois de consultar a ficha de um processo: *"guarda o contrato na pasta dele"* — ela entende de quem é o "dele".
+- *"tira esse documento da pasta"* → volta a ficar avulso (com confirmação).
+- *"quais os documentos avulsos?"* / *"documentos do processo 12345"* → ela lista, com links.
+
+**Bom saber:** mover só muda a **etiqueta** da pasta — o conteúdo, o resumo e a busca
+continuam exatamente como estavam. E, como sempre, tudo é **só seu**: a sugestão e o
+mover só enxergam os SEUS processos e documentos.
+
 ---
 
 ## Parte 3 — O que ela ainda NÃO faz (e o que vem por aí)
@@ -244,6 +267,7 @@ modelo de mensagem junto à Meta).
 - ✓ **Encontrar documentos por conteúdo** (busca) — achar por número/nome/trecho ou por assunto, sem lembrar o nome do arquivo.
 - ✓ **Resumir um documento guardado** — pedir o resumo de um documento do acervo (por "o segundo", nome/número ou com um foco), sem reenviar o arquivo.
 - ✓ **OCR (ler imagens / PDF escaneado)** — lê o texto de escaneados/fotos localmente e marca "lido por OCR" (a conferir).
+- ✓ **Pastas por processo** — sugere a pasta certa ao receber (com sua permissão) e move por conversa.
 - ▶ **Sugerir prazo a partir de uma intimação** — da leitura à agenda, automático.
 - ▶ **Rascunho de peças** (com revisão obrigatória, sem citar o que não foi verificado) — acelerar a redação.
 - 💡 **Modelos de petições/contratos** preenchidos com os dados do caso — produtividade.
@@ -286,6 +310,7 @@ modelo de mensagem junto à Meta).
 | Receber/ler/resumir/guardar documentos (PDF/Word/texto) | ✅ Sim | Recebimento pelo Zap depende do chip | Guarda com informações-chave; escaneado/foto é lido por OCR (linha abaixo) |
 | Encontrar documentos por conteúdo (busca) | ✅ Sim | Para uso real, sim | Por número/nome/trecho ou por assunto; só os seus; validável internamente |
 | Resumir um documento guardado | ✅ Sim | Para uso real, sim | Resumo salvo (na hora) ou novo com foco; só os seus; validável internamente |
+| Pastas de documentos (sugerir ao receber + mover) | ✅ Sim | Para uso real, sim | Sugere, nunca decide sozinha; mover com confirmação; busca mostra a pasta |
 | Ler escaneados/fotos por OCR (local) | ✅ Sim | Para uso real, sim | Documento não sai do ambiente; marca "lido por OCR"; baixa qualidade não é indexada |
 | Entender áudios | ❌ Ainda não | — | Planejado (por último) |
 | Jurisprudência (decisões/súmulas) | ❌ Ainda não | — | Em breve (provedor especializado) |

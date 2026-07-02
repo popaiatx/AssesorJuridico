@@ -50,14 +50,18 @@
   Passo 10; consulta "a receber"; ficha com 💰 real; **CLI `c1`** = conversa
   real com o Cérebro 1 sem chip). No caminho, **corrigido bug transversal de
   jsonb duplamente codificado** (postgres.js) que quebrava
-  confirmar-antes-de-gravar/memória/onboarding no Postgres real. Falta
+  confirmar-antes-de-gravar/memória/onboarding no Postgres real. Concluído
+  também o **Passo 18 — documentos em pastas** (sugestão determinística de
+  pasta na entrada com confirmação; mover por conversa incl. ordinal e "pasta
+  dele" via memória; busca com 📁/📂 e filtros por pasta; sem migração) —
+  **FASE A DO PLANO DE EXPANSÃO 100% COMPLETA**. Falta
   **agendar os Crons no Railway** (sync semanal + lembretes 15 min), **aprovar
   o template `lembrete_generico` na Meta** (submeter já como estagiárIA),
   **criar o bucket `documentos`** e **validar pelo WhatsApp** (download de
-  mídia, chip). Próximo: **Fase B — Passo 19 (Supabase Auth + resolução web)**
-  ou o **Passo 18 (documentos em pastas)**, a decidir. Pendência de validação:
-  pagamento sandbox (6B); o Cérebro 1 foi validado pela CLI `c1` — pelo chip
-  fica só o uso real.
+  mídia, chip). Próximo: **Fase B — Passo 19 (Supabase Auth + resolução web)**,
+  precedido da apresentação do fluxo detalhado da FUSÃO ASSISTIDA (combinado).
+  Pendência de validação: pagamento sandbox (6B); o Cérebro 1 foi validado pela
+  CLI `c1` — pelo chip fica só o uso real.
 
 ## O que já está pronto
 
@@ -292,6 +296,26 @@
   assinantes, cenário do Gabriel: 10×R$ 1.000 dia 20 → ficha → dry-run 20/07 "vence
   hoje" e D-3 "vence em 3 dias" (cada aviso SÓ ao seu dono) → paga → cancela acordo
   preservando a paga). **372 testes verdes.**
+- **Passo 18 — documentos em pastas (fecha 100% a Fase A do plano de expansão).**
+  SEM migração (`processo_id` da 0023 + `acoes_pendentes` + jsonb da memória).
+  **Sugestão de pasta na entrada:** doc guardado sem vínculo cujo conteúdo menciona
+  número de processo DO PRÓPRIO acervo → "guardo na pasta dele?" (match
+  DETERMINÍSTICO: o LLM extrai números; `findProcessosPorNumeros` escopado casa; o
+  usuário decide). Único → sim/não; vários → numerada; **CNJ completo sem dono →
+  avulso + aviso honesto**; sugerir NUNCA trava (outra mensagem descarta e segue);
+  re-OCR offline não sugere. **Mover por conversa** (handler do intent documento,
+  parser `pedido-mover` irmão do 12C): nome/ordinal da última busca; destino pelo
+  seletor do 15; "guarda na pasta dele" = último processo consultado (ficha grava
+  `processoIds` na memória); "tira da pasta" = avulso; CONFIRMAÇÃO sempre; execução
+  re-verifica posse de doc E processo (FK composta backstop); nada é reprocessado.
+  **Busca/lista com 📁 processo (cliente) / 📂 avulso** (join na query escopada) +
+  filtros "documentos avulsos"/"do processo X". Guard no Cérebro 1 descarta
+  pendência alheia (colisão entre handlers). CLIs: `doc:process --responder`
+  (mesmo caminho da interceptação) e `doc:mover`. Validado ponta a ponta (Supabase
+  + LLM reais, 2 assinantes): sugestão→sim vincula (ficha mostra), "não" mantém
+  avulso, CNJ órfão avisa, fragmento igual em A×B sugere SÓ o do próprio tenant
+  (contraprova em B), mover entre pastas/avulso com coerência na ficha e na busca.
+  **402 testes verdes.**
 - **Fix jsonb duplamente codificado (postgres.js).** `${JSON.stringify(x)}::jsonb`
   serializava DUAS vezes → o banco guardava STRING em vez de objeto, quebrando
   `acoes_pendentes` (confirmar gravava vazio), memória, onboarding, chaves e payload
@@ -431,9 +455,10 @@
 > pastas e dashboard com chat (Passos 14–24, Fases A/B/C). **APROVADO na revisão
 > de 2026-07-01** (decisões na seção 9 do plano). Passo 14 (renomeação) FEITO.**
 
-1. **Fase B — Passo 19: Supabase Auth + resolução web** OU **Passo 18 —
-   documentos em pastas** (último item da Fase A; o Passo 17 — lembrete de
-   cobrança — foi entregue dentro do 16). Aguarda o "aprovado" com a escolha.
+1. **Fase B — Passo 19: Supabase Auth + resolução web.** ANTES de implementar,
+   apresentar o **fluxo detalhado da FUSÃO ASSISTIDA** (o que o usuário vê e
+   confirma quando os dois lados têm dados) para revisão com o sócio — combinado
+   registrado. A Fase A (14–18) está 100% completa (o 17 foi entregue dentro do 16).
 2. **Agendar os Railway Crons** (sync semanal + lembretes 15 min), **aprovar o template
    na Meta**, **criar o bucket `documentos`** e **validar pelo WhatsApp** (memória, C1,
    RAG, lembrete, documentos) quando houver chip; pagamento sandbox (6B).

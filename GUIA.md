@@ -47,6 +47,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | **Resumir documento guardado (12C)** | Devolve o resumo de um documento do acervo (por ordinal da última busca, nome/número ou contexto): resumo salvo (instantâneo) ou novo relendo o Storage; isolado por tenant também na releitura. |
 | **OCR local (13)** | PDF escaneado/foto: extrai o texto por OCR LOCAL (documento nunca sai), tirando-o do ponto cego (ganha chaves/resumo/busca); marca "lido por OCR"; baixa confiança não indexa. |
 | **Financeiro/honorários (16)** | Honorário à vista/parcelado por processo (parcelas com soma exata), pagar/editar/cancelar com confirmação, consulta "a receber" e lembrete de cobrança AO ADVOGADO (nunca ao cliente final). |
+| **Documentos em pastas (18)** | Sugere a pasta certa na entrada (match determinístico por número, com confirmação), move documento entre pastas/avulso, e a busca informa onde cada um está (📁/📂). |
 | **Ficha do processo (15)** | Consulta AGREGADA de um processo (dados + agenda + documentos + financeiro), por referência natural (nº/fragmento/cliente); objeto estruturado + formatação WhatsApp separada; seções vazias honestas. |
 
 ---
@@ -155,6 +156,13 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Testar — automatizado:** `tests/dinheiro-parcelas.test.ts` (parse BRL, soma exata, dia 31→fev, bissexto), `tests/cerebro1-financeiro.test.ts` (registrar/pagar/cancelar + isolamento A×B), `tests/send-cobrancas.test.ts` (idempotência, resiliência, dry-run, dono certo).
 - **Testar — manual SEM chip (CLI):** `npm run c1 -- --telefone <tel> "<pedido>" "sim"` (conversa REAL com o Cérebro 1 — vale também p/ Passos 7/11/15), `npm run financeiro -- --telefone <tel>`, `npm run send:lembretes -- --dry-run --now "<ISO>"`.
 
+### 15. Documentos em pastas (18)
+- **Faz:** documento guardado sem vínculo que menciona número de processo DO PRÓPRIO acervo → sugestão "guardo na pasta dele?" (sim vincula; não mantém avulso; QUALQUER outra mensagem descarta e a conversa segue); CNJ completo sem dono → avulso + aviso honesto. Mover por conversa ("move X para a pasta do processo Y", "tira da pasta", "guarda na pasta dele" via memória da última ficha), sempre com confirmação; nada é reprocessado. Busca/lista exibem 📁/📂; filtros "documentos avulsos"/"do processo X".
+- **Arquivos:** `src/core/domain/documentos/sugestao-pasta.ts` + `pedido-mover.ts` (puros), sugestão em `documento-service.ts` (finalizarGuarda) + `vincularPasta`, interceptação em `document-handler.ts` (mesmo ponto do 1/2/3), mover/filtros em `document-search-handler.ts`, `DocumentoPastaStore` em `infra/db/documentos-store.ts`. **Sem migração** (processo_id da 0023; pendência em acoes_pendentes; processoIds na memória jsonb).
+- **Isolamento:** match SEMPRE contra os processos do próprio tenant; posse de doc E processo re-verificadas na execução; FK composta de backstop. Guard no Cérebro 1 descarta pendência alheia (colisão entre handlers).
+- **Testar — automatizado:** `tests/sugestao-pasta.test.ts`, `tests/pastas-sugestao.test.ts` (sim/não/outra/CNJ órfão/A×B/pendência forjada), `tests/pastas-mover.test.ts` (parser, ordinal/contexto, 📁/📂, coerência pós-mover, destino de B negado).
+- **Testar — manual SEM chip (CLI):** `npm run doc:process -- <arq> --telefone <tel> --acao salvar --responder "sim|não|N"`; `npm run doc:mover -- --telefone <tel> "<doc>" (--para "<proc>" | --avulso)`; conferir com `doc:search` (📁/📂) e `ficha`.
+
 ---
 
 ## Comandos úteis (scripts npm)
@@ -180,6 +188,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | `npm run c1 -- --telefone <tel> "msg" ["msg2"…]` | Conversa REAL com o Cérebro 1 (LLM real; turnos em sequência p/ "sim"/desambiguação). | Validar o C1 (7/11/15/16) sem chip. |
 | `npm run financeiro -- --telefone <tel> [--mes YYYY-MM] ["<proc>"]` | Consulta "a receber" real (sem LLM; atrasadas derivadas). | Validar o financeiro (16) sem chip. |
 | `npm run ficha -- --telefone <tel> "<referência>"` | Mostra a FICHA do processo (dados + agenda + docs + financeiro) pelo serviço real. | Validar a ficha (15) e o isolamento sem chip. |
+| `npm run doc:mover -- --telefone <tel> "<doc>" (--para "<proc>" \| --avulso)` | Move um documento entre pastas (posse dupla re-verificada). | Validar as pastas (18) sem chip. |
 | `npm run doc:doctor` | Diagnóstico (somente leitura) dos pré-requisitos do fluxo: banco, colunas/migração, pgvector, bucket. | Antes de rodar o fluxo de documentos; achar o que falta. |
 | `npm run doc:bucket` | Cria o bucket privado `DOCUMENTOS_BUCKET` (idempotente). | Primeiro uso do fluxo de documentos. |
 | `npm run seed:assinante -- <tel>` | Cria/atualiza um assinante de teste (admin). | Destravar testes sem onboarding. |
@@ -215,6 +224,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | Documentos (13) — OCR local (PDF escaneado/foto) | ✅ | ✅ validável por `doc:process`/`doc:ocr` | **Não** — valida pela CLI (documento nunca sai do ambiente; ≥1GB no Railway) |
 | Financeiro/honorários (16) — registrar/pagar/cancelar + consulta | ✅ | ✅ validado pela CLI `c1`/`financeiro` (Supabase real, 2 assinantes) | **Não** — valida pela CLI |
 | Lembrete de cobrança (16) — seleção/idempotência | ✅ | ✅ validável por `send:lembretes --dry-run --now` | **Não** (envio real: template + chip, como o Passo 10) |
+| Documentos em pastas (18) — sugestão + mover + 📁 na busca | ✅ | ✅ validado por `doc:process --responder`/`doc:mover` (Supabase real, A×B) | **Não** — valida pela CLI |
 | Ficha do processo (15) — agregada + isolamento | ✅ | ✅ validada por `ficha` (Supabase real, 2 assinantes) | **Não** — valida pela CLI (uso pelo WhatsApp depende do chip) |
 | Migrações 0019 (sync) / 0020 (memória) / 0021 (lembrete) / 0024 (embedding doc) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |
 

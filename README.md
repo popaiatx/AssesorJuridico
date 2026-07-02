@@ -624,6 +624,44 @@ npm run financeiro -- --telefone 5511999990001 [--mes 2026-07] ["12345"]
 npm run send:lembretes -- --dry-run --now "2026-07-20T12:05:00Z"
 ```
 
+## Documentos em pastas (Passo 18)
+
+A "pasta" de um documento é o processo (`documentos.processo_id`, da 0023 — **sem
+migração nova**). Três refinamentos, todos com a disciplina da casa:
+
+- **Sugestão de pasta na entrada:** quando o documento guardado SEM vínculo menciona
+  um número que casa com processo do PRÓPRIO assinante, a estagiárIA **sugere** —
+  *"esse documento menciona o processo X (cliente Y) — guardo na pasta dele?"* — e só
+  vincula com o **sim**. Match **determinístico** (o LLM extrai números nas chaves do
+  12A; o código casa contra o acervo do tenant; o usuário decide). Único → sim/não;
+  vários → lista numerada; **CNJ completo sem dono → guarda avulso e avisa** (nunca
+  inventa vínculo). **Sugerir nunca trava:** qualquer outra mensagem descarta a
+  sugestão silenciosamente e a conversa segue.
+- **Mover documento:** *"move o contrato do Gabriel para a pasta do processo 12345"*,
+  *"tira da pasta"* (avulso), *"guarda na pasta dele"* (último processo consultado —
+  a ficha grava `processoIds` na memória, mesmo contrato dos `docIds`). Documento por
+  nome/número/**ordinal da última busca**; destino pelo seletor do Passo 15.
+  **Confirmação sempre**; na execução, posse do documento E do processo re-verificadas
+  por tenant (FK composta de backstop). Mover **não reprocessa nada** (chaves/resumo/
+  embedding intactos); `sem_texto` move normalmente (vínculo é metadado).
+- **Busca informa a pasta:** cada resultado exibe **📁 processo X (cliente)** ou
+  **📂 avulso**; filtros *"documentos avulsos"* e *"documentos do processo X"* (a
+  ficha segue sendo o resumo agregado; a busca é a lista completa com links).
+
+### Testar pela CLI (sem chip)
+
+```bash
+# Sugestão (o --responder simula o turno seguinte pelo MESMO caminho do produto):
+npm run doc:process -- doc.txt --telefone 5511999990001 --acao salvar --responder "sim"
+# Mover / desfazer:
+npm run doc:mover -- --telefone 5511999990001 "procuracao-gabriel.txt" --para "12345"
+npm run doc:mover -- --telefone 5511999990001 "procuracao-gabriel.txt" --avulso
+# Ver as pastas: npm run doc:search / npm run ficha
+```
+
+> Isolamento validado com números IGUAIS em dois tenants: o documento de A só sugere
+> processo de A; destino de B (id forjado na pendência/memória) é negado na execução.
+
 ## Webhook do WhatsApp (Cloud API)
 
 Entrada real do produto. Só é registrado se as `WHATSAPP_*` estiverem

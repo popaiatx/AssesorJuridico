@@ -69,7 +69,12 @@ try {
       minSimilarity: config.DOCUMENTOS_BUSCA_MIN_SIM,
       logger: { error: (o, m) => console.error('[busca][erro]', m ?? '', o) },
     });
-    const { documentos } = await busca.buscar(assinanteId, referencia);
+    let { documentos } = await busca.buscar(assinanteId, referencia);
+    // Vários? Se a referência é o NOME exato de um deles, é ele (CLI pragmática).
+    if (documentos.length > 1) {
+      const exato = documentos.filter((d) => d.nome.toLowerCase() === referencia.toLowerCase());
+      if (exato.length === 1) documentos = exato;
+    }
     if (documentos.length !== 1) {
       if (documentos.length === 0) console.log('Não achei nenhum documento com essa referência.');
       else {
