@@ -26,7 +26,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 `npm run sync:corpus` (ver README › Sincronização). Banco = Supabase via **pooler**
 (porta 6543). Segredos só em variáveis de ambiente; nunca no git.
 
-**Migrações:** `supabase db push` aplica as pendentes (até a `0025`).
+**Migrações:** `supabase db push` aplica as pendentes (até a `0027`).
 
 ---
 
@@ -46,6 +46,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | **Busca de documentos (12B)** | Acha um documento guardado por referência exata (número/nome/trecho) ou vaga (assunto), combinando busca textual + semântica; só do próprio assinante; devolve link assinado. |
 | **Resumir documento guardado (12C)** | Devolve o resumo de um documento do acervo (por ordinal da última busca, nome/número ou contexto): resumo salvo (instantâneo) ou novo relendo o Storage; isolado por tenant também na releitura. |
 | **OCR local (13)** | PDF escaneado/foto: extrai o texto por OCR LOCAL (documento nunca sai), tirando-o do ponto cego (ganha chaves/resumo/busca); marca "lido por OCR"; baixa confiança não indexa. |
+| **Financeiro/honorários (16)** | Honorário à vista/parcelado por processo (parcelas com soma exata), pagar/editar/cancelar com confirmação, consulta "a receber" e lembrete de cobrança AO ADVOGADO (nunca ao cliente final). |
 | **Ficha do processo (15)** | Consulta AGREGADA de um processo (dados + agenda + documentos + financeiro), por referência natural (nº/fragmento/cliente); objeto estruturado + formatação WhatsApp separada; seções vazias honestas. |
 
 ---
@@ -147,6 +148,13 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 - **Testar — automatizado:** `tests/ficha-format.test.ts` (seções vazias honestas, marca OCR, anti-paredão, 🔒), `tests/ficha-processo.test.ts` (montagem + isolamento A×B), `tests/cerebro1-ficha.test.ts` (handler: completa/vazia/ambígua/inexistente + adversarial com números similares).
 - **Testar — manual SEM chip (CLI):** `npm run ficha -- --telefone <tel> "<nº|trecho|cliente>"`. Rode com DOIS assinantes de números similares para ver o isolamento.
 
+### 14. Financeiro / honorários (16)
+- **Faz:** "registra honorário de 10x R$ 1.000 todo dia 20 no processo do Gabriel" → confirmação com o PLANO COMPLETO → 10 parcelas (acordo). À vista = parcela única. Marcar paga / editar / cancelar parcela e cancelar acordo (REFORÇADO; pagas ficam). "O que tenho a receber este mês?" (leitura sem LLM; "atrasada" derivada do vencimento em BRT). Lembrete de cobrança no job do Passo 10 (config `COBRANCA_LEMBRETE_*`). **O sistema NUNCA cobra o cliente final.**
+- **Arquivos:** `src/core/domain/cerebro1/dinheiro.ts` + `parcelas.ts` (centavos, soma exata, clamp de dia) + `financeiro-format.ts`, ações em `cerebro1-actions.ts`, `src/infra/db/financeiro-store.ts` (escopado), `src/application/lembretes/send-cobrancas.ts` + `cobranca-format.ts`, migrações `0026`/`0027`.
+- **Config (.env):** `COBRANCA_LEMBRETE_DIAS_ANTES` ("0"; ex.: "3,0"), `COBRANCA_LEMBRETE_HORA` ("09:00"); `LLM_*` para as ações por conversa.
+- **Testar — automatizado:** `tests/dinheiro-parcelas.test.ts` (parse BRL, soma exata, dia 31→fev, bissexto), `tests/cerebro1-financeiro.test.ts` (registrar/pagar/cancelar + isolamento A×B), `tests/send-cobrancas.test.ts` (idempotência, resiliência, dry-run, dono certo).
+- **Testar — manual SEM chip (CLI):** `npm run c1 -- --telefone <tel> "<pedido>" "sim"` (conversa REAL com o Cérebro 1 — vale também p/ Passos 7/11/15), `npm run financeiro -- --telefone <tel>`, `npm run send:lembretes -- --dry-run --now "<ISO>"`.
+
 ---
 
 ## Comandos úteis (scripts npm)
@@ -162,13 +170,15 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | `npm run sync:corpus` | **Sincronização incremental** (só o que mudou); `-- --norma "…"` (uma) / `-- --force` (tudo). | Manutenção; é o que o Railway Cron roda semanalmente. |
 | `npm run ask:rag -- "pergunta"` | Valida o RAG pela CLI (mesmo pipeline do handler). Usa LLM + embeddings. | Validar o Cérebro 2 **sem WhatsApp**. |
 | `npm run ask:rag -- --conversa "p1" "p2"` | Roda perguntas em sequência com **memória** ativa (continuidade e mudança de assunto). | Validar a **memória de conversa** sem chip. |
-| `npm run send:lembretes -- --dry-run [--now "<ISO>"]` | Lista os lembretes que enviaria (sem enviar/marcar); `--now` simula o horário. | Validar a lógica do **lembrete** sem chip. |
+| `npm run send:lembretes -- --dry-run [--now "<ISO>"]` | Lista o que enviaria — AGENDA e COBRANÇA (sem enviar/marcar); `--now` simula o horário. | Validar a lógica do **lembrete** sem chip. |
 | `npm run send:lembretes` | Envia os lembretes devidos (real; precisa WHATSAPP_* + template aprovado). | É o que o Railway Cron roda a cada 15 min. |
 | `npm run doc:process -- <arquivo> --telefone <tel> [--acao …] [--processo …]` | Processa um documento local (resumir/salvar/ambos) pelo caminho real. | Validar documentos (12A) sem chip. |
 | `npm run doc:reindex [-- --lote N]` | **Backfill** dos embeddings de documentos sem vetor (idempotente; back-office). | Preparar a busca semântica em acervo já existente (12B). |
 | `npm run doc:search -- --telefone <tel> "<referência>"` | Busca documentos pelo caminho real (exata + semântica; link assinado). | Validar a busca e o **isolamento** (12B) sem chip. |
 | `npm run doc:summary -- --telefone <tel> "<referência>" [--modo guardado\|novo] [--foco "..."]` | Resume um documento guardado (salvo ou novo relendo o Storage). | Validar o resumo (12C) e o isolamento na releitura sem chip. |
 | `npm run doc:ocr [-- --telefone <tel>] [--max-paginas N] [--lote N]` | Re-OCR (idempotente) dos documentos `sem_texto` (escaneados antigos). Offline, lê mais páginas. | Tirar do ponto cego (13) o acervo escaneado já guardado. |
+| `npm run c1 -- --telefone <tel> "msg" ["msg2"…]` | Conversa REAL com o Cérebro 1 (LLM real; turnos em sequência p/ "sim"/desambiguação). | Validar o C1 (7/11/15/16) sem chip. |
+| `npm run financeiro -- --telefone <tel> [--mes YYYY-MM] ["<proc>"]` | Consulta "a receber" real (sem LLM; atrasadas derivadas). | Validar o financeiro (16) sem chip. |
 | `npm run ficha -- --telefone <tel> "<referência>"` | Mostra a FICHA do processo (dados + agenda + docs + financeiro) pelo serviço real. | Validar a ficha (15) e o isolamento sem chip. |
 | `npm run doc:doctor` | Diagnóstico (somente leitura) dos pré-requisitos do fluxo: banco, colunas/migração, pgvector, bucket. | Antes de rodar o fluxo de documentos; achar o que falta. |
 | `npm run doc:bucket` | Cria o bucket privado `DOCUMENTOS_BUCKET` (idempotente). | Primeiro uso do fluxo de documentos. |
@@ -191,7 +201,7 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | WhatsApp (webhook/parse/janela) | ✅ | ❌ ainda não | **Sim** (registrar número na Meta) |
 | Onboarding + trial + porteiro | ✅ | ❌ ainda não | **Sim** (fluxo real é pelo WhatsApp) |
 | Pagamento Asaas | ✅ | ❌ falta sandbox | **Não** (ciclo pode rodar no sandbox); aviso proativo sim |
-| Cérebro 1 (dados do escritório) | ✅ | ❌ ainda não | **Sim** (uso real é pelo WhatsApp) |
+| Cérebro 1 (dados do escritório) | ✅ | ✅ validado pela CLI `c1` (LLM real + Postgres real) | Uso real pelo WhatsApp, sim |
 | Cérebro 1 — editar/remover (compromisso) e editar/arquivar (processo) | ✅ | ❌ ainda não | **Sim**; desambiguação numerada + confirmação reforçada |
 | Cérebro 2 — motor RAG + sync | ✅ | ✅ corpus carregado; validado pela CLI | **Não** — valida pela CLI `ask:rag` |
 | Cérebro 2 — resposta pelo WhatsApp | ✅ (handler) | ❌ ainda não | **Sim** |
@@ -203,6 +213,8 @@ serverless). A sincronização do corpus é um **Cron Job semanal SEPARADO** rod
 | Documentos (12C) — resumir guardado (salvo/novo) + isolamento na releitura | ✅ | ✅ validável por `doc:summary` | **Não** — valida pela CLI (isolamento da releitura provado em testes + ponta a ponta) |
 | Documentos — receber pelo WhatsApp (download da mídia) | ✅ (código) | ❌ PENDENTE | **Sim** (chip) |
 | Documentos (13) — OCR local (PDF escaneado/foto) | ✅ | ✅ validável por `doc:process`/`doc:ocr` | **Não** — valida pela CLI (documento nunca sai do ambiente; ≥1GB no Railway) |
+| Financeiro/honorários (16) — registrar/pagar/cancelar + consulta | ✅ | ✅ validado pela CLI `c1`/`financeiro` (Supabase real, 2 assinantes) | **Não** — valida pela CLI |
+| Lembrete de cobrança (16) — seleção/idempotência | ✅ | ✅ validável por `send:lembretes --dry-run --now` | **Não** (envio real: template + chip, como o Passo 10) |
 | Ficha do processo (15) — agregada + isolamento | ✅ | ✅ validada por `ficha` (Supabase real, 2 assinantes) | **Não** — valida pela CLI (uso pelo WhatsApp depende do chip) |
 | Migrações 0019 (sync) / 0020 (memória) / 0021 (lembrete) / 0024 (embedding doc) | ✅ (Docker pgvector/RLS) | ⚠️ aplicar com `db push` | Não |
 

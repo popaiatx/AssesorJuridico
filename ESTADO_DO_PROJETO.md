@@ -44,12 +44,20 @@
   registradas na seção 9). Concluído também o **Passo 15 — ficha do processo**
   (consulta AGREGADA: dados + agenda + documentos + financeiro; objeto
   estruturado p/ dois canais; seletor com fragmento de número; validada ponta a
-  ponta no Supabase real com 2 assinantes adversariais). Falta **agendar os
-  Crons no Railway** (sync semanal + lembretes 15 min), **aprovar o template
-  `lembrete_generico` na Meta** (submeter já como estagiárIA), **criar o bucket
-  `documentos`** e **validar pelo WhatsApp** (download de mídia, chip).
-  Próximo: **Passo 16 — honorários/parcelas** (Fase A do plano de expansão).
-  Pendências de validação acumuladas: Cérebro 1, pagamento sandbox (6B) — pelo chip.
+  ponta no Supabase real com 2 assinantes adversariais). Concluído também o
+  **Passo 16 — financeiro/honorários/parcelas** (à vista/parcelado com soma
+  exata; pagar/editar/cancelar com confirmação; lembrete de cobrança no motor do
+  Passo 10; consulta "a receber"; ficha com 💰 real; **CLI `c1`** = conversa
+  real com o Cérebro 1 sem chip). No caminho, **corrigido bug transversal de
+  jsonb duplamente codificado** (postgres.js) que quebrava
+  confirmar-antes-de-gravar/memória/onboarding no Postgres real. Falta
+  **agendar os Crons no Railway** (sync semanal + lembretes 15 min), **aprovar
+  o template `lembrete_generico` na Meta** (submeter já como estagiárIA),
+  **criar o bucket `documentos`** e **validar pelo WhatsApp** (download de
+  mídia, chip). Próximo: **Fase B — Passo 19 (Supabase Auth + resolução web)**
+  ou o **Passo 18 (documentos em pastas)**, a decidir. Pendência de validação:
+  pagamento sandbox (6B); o Cérebro 1 foi validado pela CLI `c1` — pelo chip
+  fica só o uso real.
 
 ## O que já está pronto
 
@@ -265,6 +273,30 @@
   números SIMILARES com filhos "parecidos"): completa, vazia honesta, por nome,
   ambígua numerada, fragmento exclusivo de B p/ A → não encontra; nada de B em
   nenhuma seção de A. **341 testes verdes.**
+- **Passo 16 — financeiro/honorários/parcelas (fecha a Fase A do plano de expansão).**
+  Migrações 0026 (descricao/acordo_id/parcela/total_parcelas/pago_em — `descricao`
+  comporta ÊXITO futuro sem migração) e 0027 (`cobranca_lembretes_enviados` +
+  `app.cobrancas_due` com instantes COMPUTADOS do vencimento — hora/dias-antes
+  configuráveis: `COBRANCA_LEMBRETE_HORA` 09:00, `COBRANCA_LEMBRETE_DIAS_ANTES` "0").
+  **Dinheiro em centavos inteiros** (parseValorBRL: ambíguo → pergunta; divisão com
+  SOMA EXATA — diferença na 1ª parcela; dia 31 → último dia do mês, NÃO-sticky,
+  bissexto testado). Ações: `registrar_honorario` (à vista/parcelado, confirmação
+  com o PLANO COMPLETO), `marcar_parcela_paga`, `editar_parcela`, `cancelar_parcela`,
+  `cancelar_acordo` (REFORÇADA; só pendentes — pagas ficam; cancelar = status, nunca
+  delete), `consultar_financeiro` (determinística, sem LLM; "atrasada" DERIVADA em
+  BRT). Lembrete de cobrança no MESMO job/cron/lock do Passo 10 (marca-após-sucesso,
+  dry-run fiel) — **sempre ao dono; o sistema NUNCA cobra o cliente final**. Ficha
+  (15) com 💰 real (contagens/somas/próxima). **CLIs novas:** `c1` (conversa REAL
+  com o Cérebro 1, LLM real, turnos em sequência — fecha o gap de validação sem chip
+  dos Passos 7/11/15/16) e `financeiro`. Validado ponta a ponta (Supabase real, 2
+  assinantes, cenário do Gabriel: 10×R$ 1.000 dia 20 → ficha → dry-run 20/07 "vence
+  hoje" e D-3 "vence em 3 dias" (cada aviso SÓ ao seu dono) → paga → cancela acordo
+  preservando a paga). **372 testes verdes.**
+- **Fix jsonb duplamente codificado (postgres.js).** `${JSON.stringify(x)}::jsonb`
+  serializava DUAS vezes → o banco guardava STRING em vez de objeto, quebrando
+  `acoes_pendentes` (confirmar gravava vazio), memória, onboarding, chaves e payload
+  no Postgres REAL (invisível aos testes com stores em memória; pego pela CLI `c1`).
+  Escritas passam o OBJETO; leituras com `jsonbParse` (cura linhas antigas).
 - **Fix Node 20 / WebSocket.** O `@supabase/supabase-js` construía um RealtimeClient
   que exigia WebSocket nativo (só no Node 22+), quebrando todos os scripts de banco
   no Node 20. `admin.ts` passou a desligar o Realtime (transport no-op) — roda no
@@ -380,9 +412,10 @@
   template aprovado na Meta.
 - **Fila durável do webhook** (ack rápido + worker) — caminho de escala.
 - **Cérebro 3 (tribunais)** — agregador (próximo dos cérebros).
-- **Cérebro 1 — incrementos restantes:** custos/honorários (financeiro). Editar/
-  remover compromisso e editar/arquivar processo já FEITOS (Passo 11); exclusão
-  destrutiva de processo deixada de fora de propósito (arquivar é o seguro).
+- **Cérebro 1 — incrementos restantes:** custos avulsos (`registrar_custo`) e
+  honorário de ÊXITO (o desenho já comporta: `descricao` livre + `acordo_id`).
+  Honorários/parcelas/cobrança FEITOS (Passo 16); editar/remover FEITOS (Passo 11);
+  exclusão destrutiva de processo deixada de fora de propósito (arquivar é o seguro).
 - Captura de `entrada`/`saida` no log (hoje `null`): só após estender a anonimização.
 - Provisionamento Supabase (projeto, pooler, role sem BYPASSRLS, backups/PITR).
 - **Pruning** das linhas antigas de `whatsapp_mensagens_processadas` e
@@ -398,7 +431,9 @@
 > pastas e dashboard com chat (Passos 14–24, Fases A/B/C). **APROVADO na revisão
 > de 2026-07-01** (decisões na seção 9 do plano). Passo 14 (renomeação) FEITO.**
 
-1. **Passo 16 — honorários/parcelas** (Fase A; aguarda o "aprovado" do passo).
+1. **Fase B — Passo 19: Supabase Auth + resolução web** OU **Passo 18 —
+   documentos em pastas** (último item da Fase A; o Passo 17 — lembrete de
+   cobrança — foi entregue dentro do 16). Aguarda o "aprovado" com a escolha.
 2. **Agendar os Railway Crons** (sync semanal + lembretes 15 min), **aprovar o template
    na Meta**, **criar o bucket `documentos`** e **validar pelo WhatsApp** (memória, C1,
    RAG, lembrete, documentos) quando houver chip; pagamento sandbox (6B).

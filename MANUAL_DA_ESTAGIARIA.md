@@ -171,6 +171,28 @@ vinculados ainda"* (nada some em silêncio); documento lido por OCR mantém o av
 conferência; e processo em segredo de justiça vem marcado com 🔒. Como todo o resto,
 a ficha é **só sua**: ela nunca mistura nem mostra dados de outra conta.
 
+### 10. Honorários e parcelas (com lembrete de cobrança)
+**O que faz:** você registra os honorários de um processo — **à vista** ou
+**parcelado** — e ela controla as parcelas: avisa você no vencimento, marca como
+paga quando você disser, e mostra o que há a receber. **Importante:** o aviso é
+sempre **para você**; a estagiárIA **nunca cobra o seu cliente** diretamente.
+
+**Exemplos (o caso do Gabriel):**
+- Você: *"registra honorário de 10 parcelas de R$ 1.000, todo dia 20, primeira em 20/07, no processo do Gabriel"*
+  Ela mostra o **plano completo** antes de gravar: *"Registrar honorário no processo nº …, cliente Gabriel Machado: 10 parcelas de R$ 1.000,00, todo dia 20, de 20/07/2026 a 20/04/2027 (total R$ 10.000,00). Vou te lembrar de cada vencimento (o aviso é só para você — eu nunca cobro o seu cliente). Responda SIM"* — e só grava com o seu **"sim"**.
+- À vista: *"registra honorário de R$ 10.000 no processo do Gabriel, vencendo 20/07"* → parcela única.
+- No dia do vencimento (às 9h, horário que você pode ajustar), chega o aviso:
+  *"💰 Lembrete: parcela 1/10 do processo … (cliente Gabriel Machado) vence hoje — R$ 1.000,00."*
+  Dá para pedir aviso também alguns dias antes.
+- Você: *"a parcela de julho do Gabriel foi paga"* → ela confirma mostrando a parcela real e marca como **paga**.
+- Você: *"o que tenho a receber este mês?"* → total + parcelas, com as **atrasadas** destacadas (⚠️).
+- Você: *"cancela o acordo de honorários do Gabriel"* → confirmação **reforçada** mostrando o que será cancelado (*"⚠️ Vou CANCELAR 9 parcelas PENDENTES (R$ 9.000,00)… A paga fica no histórico"*) — as parcelas **pagas nunca somem**; nada é apagado de verdade, só marcado como cancelado.
+
+**Bom saber:**
+- Contas que não fecham? Ela divide certinho: R$ 10.000 em 3 vira **3.333,34 + 3.333,33 + 3.333,33** (a soma bate sempre).
+- *"Todo dia 31"* em mês sem dia 31 cai no **último dia do mês** (fevereiro: 28/29) — e volta ao 31 no mês seguinte.
+- A **ficha do processo** mostra o resumo do financeiro (pagas, pendentes, atrasadas e a próxima a vencer).
+
 ---
 
 ## Parte 3 — O que ela ainda NÃO faz (e o que vem por aí)
@@ -180,7 +202,6 @@ a ficha é **só sua**: ela nunca mistura nem mostra dados de outra conta.
   legislação; jurisprudência virá por um provedor especializado. *(em breve)*
 - **Andamento processual** (acompanhar movimentações do processo nos tribunais e
   avisar quando algo anda) — *(planejado)*
-- **Financeiro/honorários** (registrar custos e cobrar) — *(planejado)*
 
 **Depende da ativação do WhatsApp (o número/chip):** o uso real pelo WhatsApp — tanto
 as respostas quanto os lembretes automáticos — só acontece quando o número estiver
@@ -233,8 +254,8 @@ modelo de mensagem junto à Meta).
 - 💡 **Respostas a dúvidas frequentes** do cliente, sob controle do advogado.
 
 ### Financeiro e honorários
-- ▶ **Registrar custos e honorários por processo** — saber quanto cada caso rende/custa.
-- ▶ **Lembrete de cobrança de honorário** — não esquecer de receber.
+- ✓ **Registrar honorários por processo (à vista ou parcelado)** — saber quanto cada caso rende. *(custos avulsos: a seguir)*
+- ✓ **Lembrete de cobrança de honorário** — aviso a você no vencimento de cada parcela (nunca ao seu cliente).
 - ▶ **Relatório financeiro** — visão do mês/ano.
 - 💡 **Gerar cobrança (Pix) para o cliente final** — receber mais rápido.
 
@@ -269,7 +290,7 @@ modelo de mensagem junto à Meta).
 | Entender áudios | ❌ Ainda não | — | Planejado (por último) |
 | Jurisprudência (decisões/súmulas) | ❌ Ainda não | — | Em breve (provedor especializado) |
 | Andamento processual (tribunais) | ❌ Ainda não | — | Planejado |
-| Financeiro/honorários | ❌ Ainda não | — | Planejado |
+| Honorários e parcelas (com lembrete de cobrança) | ✅ Sim | Para uso real, sim | Plano completo confirmado antes de gravar; aviso só para você; pagas nunca somem |
 
 > **Sobre o "precisa do WhatsApp ativo":** quase tudo já está construído e testado por
 > dentro; o que falta para virar experiência real é ligar o número do WhatsApp (e, para

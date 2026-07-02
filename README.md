@@ -590,6 +590,40 @@ npm run ficha -- --telefone 5511999990001 "Maria Silva"  # por cliente/parte
 > "parecidos") e validado ponta a ponta contra o Supabase real: o fragmento que casa
 > nos dois tenants devolve **só** o processo do próprio assinante, em todas as seções.
 
+## Financeiro / honorários com parcelas (Passo 16)
+
+Honorário vinculado a um processo, em DOIS modos: **à vista** (valor + vencimento →
+parcela única) e **parcelado** (total OU valor da parcela + nº de parcelas + dia do
+mês). Cada parcela é uma linha em `lancamentos_financeiros` (0009 + migração `0026`),
+agrupadas por `acordo_id` — todas geradas na criação (o plano completo aparece na
+confirmação e na ficha). `descricao` livre comporta o honorário de ÊXITO no futuro.
+
+- **Dinheiro em centavos inteiros** (nunca float). Divisão com **soma exata**: a
+  diferença vai na PRIMEIRA parcela (R$ 10.000 em 3 → 3.333,34 + 3.333,33 + 3.333,33).
+- **"Todo dia 31"** cai no último dia do mês (fev = 28/29), SEM ser sticky.
+- **"Atrasada" é derivada** (pendente + vencimento < hoje BRT), nunca gravada.
+- Ações: `registrar_honorario` (confirmação com o plano completo), `marcar_parcela_paga`,
+  `editar_parcela`, `cancelar_parcela` e `cancelar_acordo` (REFORÇADA; cancela só as
+  pendentes — as pagas ficam no histórico; cancelar = status, nunca delete);
+  `consultar_financeiro` ("o que tenho a receber este mês?") determinística, sem LLM.
+- **Lembrete de COBRANÇA** no motor do Passo 10 (migração `0027`): instantes computados
+  do vencimento (`COBRANCA_LEMBRETE_HORA`, default 09:00 BRT; `COBRANCA_LEMBRETE_DIAS_ANTES`,
+  default só no dia), idempotente (marca-após-sucesso), mesmo cron/advisory lock/dry-run.
+  **O aviso vai SEMPRE ao próprio advogado — o sistema NUNCA cobra o cliente final.**
+- A ficha (Passo 15) mostra o financeiro real: contagens, somas, próxima a vencer.
+
+### Testar pela CLI (sem chip)
+
+```bash
+# Conversa REAL com o Cérebro 1 (LLM real, turnos em sequência p/ confirmar):
+npm run c1 -- --telefone 5511999990001 "registra honorario de 10 parcelas de 1000 reais, todo dia 20, primeira parcela em 20/07/2026, no processo do cliente Gabriel Machado" "sim"
+npm run c1 -- --telefone 5511999990001 "a parcela de julho do Gabriel foi paga" "sim"
+
+# Consulta "a receber" (sem LLM) e lembretes de cobrança (dry-run "viajando"):
+npm run financeiro -- --telefone 5511999990001 [--mes 2026-07] ["12345"]
+npm run send:lembretes -- --dry-run --now "2026-07-20T12:05:00Z"
+```
+
 ## Webhook do WhatsApp (Cloud API)
 
 Entrada real do produto. Só é registrado se as `WHATSAPP_*` estiverem
@@ -864,7 +898,7 @@ filtro na aplicação. Pontos críticos desta fundação:
 Validado em Postgres 15: fail-closed, isolamento entre dois assinantes, rejeição
 de `assinante_id` divergente, resolver por telefone e imutabilidade do log.
 
-## Tabelas (migrações 0001–0023)
+## Tabelas (migrações 0001–0027)
 
 `assinantes`, `clientes`, `processos`, `movimentacoes`, `compromissos`,
 `documentos`, `lancamentos_financeiros`, `assinaturas` + `pagamento_eventos`

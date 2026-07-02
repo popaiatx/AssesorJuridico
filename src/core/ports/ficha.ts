@@ -49,6 +49,9 @@ export interface FichaLancamento {
   valor: string; // numeric como string
   vencimento: string | null; // ISO date (YYYY-MM-DD)
   status: string; // 'pendente' | 'pago' | 'cancelado'
+  parcela: number | null; // Passo 16: "3" (de 10); null = lançamento avulso
+  totalParcelas: number | null;
+  descricao: string | null;
 }
 
 /** Dados BRUTOS da agregação (uma transação, 4 consultas escopadas por tenant). */
@@ -72,6 +75,13 @@ export interface FichaProcesso {
     /** Somas por status, em string decimal ("1234.56") — sem float em dinheiro. */
     totalPendente: string;
     totalPago: string;
+    /** Passo 16 (cancelados fora de tudo; "atrasada" DERIVADA de hoje BRT). */
+    pendentes: number;
+    pagas: number;
+    atrasadas: number;
+    totalAtrasado: string;
+    /** Próxima pendente a vencer (ou a mais antiga atrasada, se só houver atraso). */
+    proxima: FichaLancamento | null;
   };
 }
 

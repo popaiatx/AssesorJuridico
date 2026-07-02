@@ -80,8 +80,13 @@ function horaMinuto(): { hora: number; minuto: number } {
 export const cobrancasStore: CobrancasStore = {
   async due(agoraIso: string, graceMin: number): Promise<DueCobranca[]> {
     const { hora, minuto } = horaMinuto();
+    // vencimento::text: o driver devolveria `date` como Date JS (com shift de
+    // fuso na exibição); como TEXTO o dia vem exato (YYYY-MM-DD), sem fuso.
     const rows = await pool<DueCobrancaRow[]>`
-      select * from app.cobrancas_due(
+      select assinante_id, telefone, lancamento_id, lembrete_em,
+             vencimento::text as vencimento, valor::text as valor,
+             parcela, total_parcelas, descricao, processo_numero, cliente_nome
+      from app.cobrancas_due(
         ${agoraIso}::timestamptz, ${graceMin}, ${diasAntes()}::int[], ${hora}, ${minuto})
     `;
     return rows.map((r) => ({
@@ -89,7 +94,7 @@ export const cobrancasStore: CobrancasStore = {
       telefone: r.telefone,
       lancamentoId: r.lancamento_id,
       lembreteEm: iso(r.lembrete_em),
-      vencimento: String(r.vencimento).slice(0, 10),
+      vencimento: r.vencimento,
       valorDecimal: r.valor,
       parcela: r.parcela,
       totalParcelas: r.total_parcelas,

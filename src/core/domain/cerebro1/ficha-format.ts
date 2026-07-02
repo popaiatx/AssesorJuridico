@@ -97,19 +97,36 @@ export function formatarFicha(f: FichaProcesso): string {
     }
   }
 
-  // --- Financeiro (slot real; o Passo 16 passa a preenchê-lo) ---
+  // --- Financeiro (Passo 16: resumo + próxima a vencer; anti-paredão — a lista
+  // completa sai pela consulta "o que tenho a receber nesse processo") ---
   linhas.push('');
   linhas.push('💰 *Financeiro*');
-  if (f.financeiro.lancamentos.length === 0) {
+  const fin = f.financeiro;
+  if (fin.lancamentos.length === 0) {
     linhas.push('sem lançamentos ainda.');
   } else {
-    const pend = f.financeiro.lancamentos.filter((l) => l.status === 'pendente').length;
-    const pago = f.financeiro.lancamentos.filter((l) => l.status === 'pago').length;
-    const resumo: string[] = [];
-    if (pend > 0) resumo.push(`${pend} pendente(s): ${moeda(f.financeiro.totalPendente)}`);
-    if (pago > 0) resumo.push(`${pago} pago(s): ${moeda(f.financeiro.totalPago)}`);
-    if (resumo.length === 0) resumo.push(`${f.financeiro.lancamentos.length} lançamento(s)`);
-    linhas.push(resumo.join(' · '));
+    const contagem: string[] = [`${fin.lancamentos.length} parcela(s)`];
+    if (fin.pagas > 0) contagem.push(`${fin.pagas} paga(s)`);
+    if (fin.pendentes > 0) contagem.push(`${fin.pendentes} pendente(s)`);
+    if (fin.atrasadas > 0) contagem.push(`${fin.atrasadas} atrasada(s) ⚠️`);
+    linhas.push(contagem.join(' · '));
+    const somas: string[] = [];
+    if (fin.pendentes > 0) {
+      somas.push(
+        `pendente: ${moeda(fin.totalPendente)}` +
+          (fin.atrasadas > 0 ? ` (${moeda(fin.totalAtrasado)} em atraso)` : ''),
+      );
+    }
+    if (fin.pagas > 0) somas.push(`pago: ${moeda(fin.totalPago)}`);
+    if (somas.length > 0) linhas.push(somas.join(' · '));
+    if (fin.proxima?.vencimento) {
+      const num =
+        fin.proxima.parcela && fin.proxima.totalParcelas
+          ? `${fin.proxima.parcela}/${fin.proxima.totalParcelas}`
+          : 'única';
+      const [ano, mes, dia] = fin.proxima.vencimento.split('-');
+      linhas.push(`próxima: ${num} em ${dia}/${mes}/${ano} (${moeda(fin.proxima.valor)})`);
+    }
   }
 
   linhas.push('');

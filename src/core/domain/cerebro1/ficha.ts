@@ -3,6 +3,7 @@
  * objeto estruturado `FichaProcesso` (split futuros/recentes + totais).
  * Sem I/O e sem string de apresentação — formatação fica no ficha-format.
  */
+import { hojeBRT } from './parcelas.js';
 import type { FichaBruta, FichaLancamento, FichaProcesso } from '../../ports/ficha.js';
 
 /** Soma valores decimais ("1234.56") em CENTAVOS inteiros — dinheiro sem float. */
@@ -32,14 +33,27 @@ export function montarFicha(bruta: FichaBruta, agora: Date): FichaProcesso {
   const recentes = bruta.compromissos
     .filter((c) => new Date(c.dataHora).getTime() < t)
     .reverse();
+  // Passo 16: cancelados ficam fora de contagens/somas (são só histórico);
+  // "atrasada" é DERIVADA (pendente + vencimento < hoje BRT), nunca gravada.
+  const hoje = hojeBRT(agora);
+  const ativos = bruta.lancamentos.filter((l) => l.status !== 'cancelado');
+  const pendentes = ativos.filter((l) => l.status === 'pendente');
+  const atrasadas = pendentes.filter((l) => l.vencimento !== null && l.vencimento < hoje);
+  const proxima =
+    pendentes.find((l) => l.vencimento !== null && l.vencimento >= hoje) ?? pendentes[0] ?? null;
   return {
     processo: bruta.processo,
     agenda: { futuros, recentes },
     documentos: bruta.documentos,
     financeiro: {
-      lancamentos: bruta.lancamentos,
-      totalPendente: somaPorStatus(bruta.lancamentos, 'pendente'),
-      totalPago: somaPorStatus(bruta.lancamentos, 'pago'),
+      lancamentos: ativos,
+      totalPendente: somaPorStatus(ativos, 'pendente'),
+      totalPago: somaPorStatus(ativos, 'pago'),
+      pendentes: pendentes.length,
+      pagas: ativos.filter((l) => l.status === 'pago').length,
+      atrasadas: atrasadas.length,
+      totalAtrasado: somarValores(atrasadas.map((l) => l.valor)),
+      proxima,
     },
   };
 }

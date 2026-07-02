@@ -45,9 +45,9 @@ describe('montarFicha (pura)', () => {
       ],
       documentos: [],
       lancamentos: [
-        { id: 'l1', tipo: 'honorario', valor: '1000.00', vencimento: '2026-08-01', status: 'pendente' },
-        { id: 'l2', tipo: 'honorario', valor: '500.50', vencimento: '2026-06-01', status: 'pago' },
-        { id: 'l3', tipo: 'custo', valor: '99.99', vencimento: null, status: 'cancelado' },
+        { id: 'l1', tipo: 'honorario', valor: '1000.00', vencimento: '2026-08-01', status: 'pendente', parcela: 1, totalParcelas: 1, descricao: null },
+        { id: 'l2', tipo: 'honorario', valor: '500.50', vencimento: '2026-06-01', status: 'pago', parcela: 1, totalParcelas: 1, descricao: null },
+        { id: 'l3', tipo: 'custo', valor: '99.99', vencimento: null, status: 'cancelado', parcela: 1, totalParcelas: 1, descricao: null },
       ],
     });
     expect(f.agenda.futuros.map((c) => c.id)).toEqual(['c2']);
@@ -67,7 +67,7 @@ describe('formatarFicha (texto WhatsApp)', () => {
         ],
         documentos: [{ id: 'd1', nome: 'contrato.pdf', extracaoStatus: 'ok', enviadoEm: '2026-06-01T00:00:00Z' }],
         lancamentos: [
-          { id: 'l1', tipo: 'honorario', valor: '1000.00', vencimento: '2026-08-01', status: 'pendente' },
+          { id: 'l1', tipo: 'honorario', valor: '1000.00', vencimento: '2026-08-01', status: 'pendente', parcela: 1, totalParcelas: 1, descricao: null },
         ],
       }),
     );

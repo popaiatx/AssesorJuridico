@@ -156,7 +156,7 @@ function brutaCompleta(id: string, numero: string, marcador: string): FichaBruta
       { id: `d-${marcador}`, nome: `contrato-${marcador}.pdf`, extracaoStatus: 'ok', enviadoEm: '2026-06-01T00:00:00Z' },
     ],
     lancamentos: [
-      { id: `l-${marcador}`, tipo: 'honorario', valor: '500.00', vencimento: '2026-08-01', status: 'pendente' },
+      { id: `l-${marcador}`, tipo: 'honorario', valor: '500.00', vencimento: '2026-08-01', status: 'pendente', parcela: 1, totalParcelas: 1, descricao: null },
     ],
   };
 }

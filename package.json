@@ -30,6 +30,8 @@
     "doc:bucket": "tsx scripts/doc-bucket.ts",
     "ask:rag": "tsx scripts/ask-rag.ts",
     "ficha": "tsx scripts/ficha.ts",
+    "c1": "tsx scripts/c1.ts",
+    "financeiro": "tsx scripts/financeiro.ts",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
     "db:migration": "supabase migration new",
